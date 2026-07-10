@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//BLS//Release Calendar//EN
+BEGIN:VEVENT
+UID:cpi-invalid-start
+DTSTART:not-a-time
+SUMMARY:Consumer Price Index
+END:VEVENT
+END:VCALENDAR
