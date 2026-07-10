@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
@@ -59,7 +60,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 	}
 	switch arguments[0] {
 	case "migrate":
-		if err := ingestionpostgres.Migrate(ctx, pool); err != nil {
+		if err := databasepostgres.Migrate(ctx, pool); err != nil {
 			return fmt.Errorf("migrate PostgreSQL: %w", err)
 		}
 		_, _ = fmt.Fprintln(stdout, "database migrations applied")

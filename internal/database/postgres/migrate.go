@@ -1,3 +1,4 @@
+// Package postgres owns the Atlas PostgreSQL schema migrations.
 package postgres
 
 import (
@@ -8,12 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const sourceRecordsMigrationVersion = 1
-
 //go:embed migrations/000001_create_source_records.up.sql
 var sourceRecordsMigration string
 
-// Migrate applies pending ingestion database migrations transactionally.
+//go:embed migrations/000002_create_economic_events.up.sql
+var economicEventsMigration string
+
+var migrations = []struct {
+	version int64
+	query   string
+}{
+	{version: 1, query: sourceRecordsMigration},
+	{version: 2, query: economicEventsMigration},
+}
+
+// Migrate applies pending database migrations transactionally.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return fmt.Errorf("PostgreSQL connection is required")
@@ -38,24 +48,28 @@ CREATE TABLE IF NOT EXISTS atlas_schema_migrations (
 		return fmt.Errorf("create migration ledger: %w", err)
 	}
 
-	var applied bool
-	if err := transaction.QueryRow(
-		ctx,
-		`SELECT EXISTS (SELECT 1 FROM atlas_schema_migrations WHERE version = $1)`,
-		sourceRecordsMigrationVersion,
-	).Scan(&applied); err != nil {
-		return fmt.Errorf("check migration %d: %w", sourceRecordsMigrationVersion, err)
-	}
-	if !applied {
-		if _, err := transaction.Exec(ctx, sourceRecordsMigration); err != nil {
-			return fmt.Errorf("apply migration %d: %w", sourceRecordsMigrationVersion, err)
+	for _, migration := range migrations {
+		var applied bool
+		if err := transaction.QueryRow(
+			ctx,
+			`SELECT EXISTS (SELECT 1 FROM atlas_schema_migrations WHERE version = $1)`,
+			migration.version,
+		).Scan(&applied); err != nil {
+			return fmt.Errorf("check migration %d: %w", migration.version, err)
+		}
+		if applied {
+			continue
+		}
+
+		if _, err := transaction.Exec(ctx, migration.query); err != nil {
+			return fmt.Errorf("apply migration %d: %w", migration.version, err)
 		}
 		if _, err := transaction.Exec(
 			ctx,
 			`INSERT INTO atlas_schema_migrations (version) VALUES ($1)`,
-			sourceRecordsMigrationVersion,
+			migration.version,
 		); err != nil {
-			return fmt.Errorf("record migration %d: %w", sourceRecordsMigrationVersion, err)
+			return fmt.Errorf("record migration %d: %w", migration.version, err)
 		}
 	}
 

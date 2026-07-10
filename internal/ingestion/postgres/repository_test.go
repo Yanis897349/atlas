@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/jackc/pgx/v5"
@@ -214,12 +215,8 @@ func openTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 
-	migration, err := os.ReadFile("migrations/000001_create_source_records.up.sql")
-	if err != nil {
-		t.Fatalf("read source-record migration: %v", err)
-	}
-	if _, err := pool.Exec(t.Context(), string(migration)); err != nil {
-		t.Fatalf("apply source-record migration: %v", err)
+	if err := databasepostgres.Migrate(t.Context(), pool); err != nil {
+		t.Fatalf("apply database migrations: %v", err)
 	}
 
 	return pool

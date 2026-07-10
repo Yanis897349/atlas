@@ -47,6 +47,12 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 	if count != 2 {
 		t.Errorf("source record count = %d, want 2", count)
 	}
+	if err := applicationPool.QueryRow(t.Context(), "SELECT count(*) FROM economic_events").Scan(&count); err != nil {
+		t.Fatalf("count economic events: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("economic event count = %d, want 0", count)
+	}
 }
 
 func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
