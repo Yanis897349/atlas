@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Central Bank</title>
+    <link>https://example.com/</link>
+    <description>Policy releases</description>
+    <item>
+      <guid isPermaLink="false">release-123</guid>
+      <link>https://example.com/releases/rates-july</link>
+      <title>Policy rate unchanged</title>
+      <pubDate>Thu, 09 Jul 2026 12:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <link>https://example.com/releases/minutes-june</link>
+      <title>June meeting minutes</title>
+      <pubDate>2026-07-08T15:30:00Z</pubDate>
+    </item>
+  </channel>
+</rss>

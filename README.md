@@ -138,3 +138,14 @@ Source Scoring           Topic Classification
 - Team dashboards
 - Custom alerting
 - API access
+
+## Development
+
+Atlas uses Go 1.26.5, pinned in `.mise.toml`. Install and activate it with mise, then run the backend test suite:
+
+```sh
+mise install
+mise exec -- go test ./...
+```
+
+The initial supported source is the [InvestingLive RSS feed](https://investinglive.com/feed/). The RSS 2.0 adapter normalizes feed items without persistence. Source item identity is a SHA-256 digest of the configured source and the entry GUID, falling back to the original URL when no GUID is present; exact repeated identities within one response are emitted once.
