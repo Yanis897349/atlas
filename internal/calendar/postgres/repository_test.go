@@ -148,12 +148,12 @@ func TestRepositoryUpcomingEventsFiltersOrdersAndLimits(t *testing.T) {
 	windowStart := time.Date(2026, time.August, 1, 8, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(4 * time.Hour)
 	events := []calendar.Event{
-		newEvent("before", calendar.RegionUnitedStates, windowStart.Add(-time.Nanosecond)),
+		newEvent("before", calendar.RegionUnitedStates, windowStart.Add(-time.Microsecond)),
 		newEvent("start", calendar.RegionUnitedStates, windowStart),
 		newEvent("middle-b", calendar.RegionUnitedStates, windowStart.Add(2*time.Hour)),
 		newEvent("middle-a", calendar.RegionUnitedStates, windowStart.Add(2*time.Hour)),
 		newEvent("end", calendar.RegionUnitedStates, windowEnd),
-		newEvent("after", calendar.RegionUnitedStates, windowEnd.Add(time.Nanosecond)),
+		newEvent("after", calendar.RegionUnitedStates, windowEnd.Add(time.Microsecond)),
 		newEvent("other-region", calendar.RegionEurozone, windowStart.Add(time.Hour)),
 	}
 
