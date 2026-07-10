@@ -26,7 +26,7 @@ func (a *Adapter) fetchBody(ctx context.Context) ([]byte, error) {
 			if contextErr := ctx.Err(); contextErr != nil {
 				return nil, fmt.Errorf("fetch RSS feed: %w", contextErr)
 			}
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if errors.Is(err, context.Canceled) {
 				return nil, fmt.Errorf("fetch RSS feed: %w", err)
 			}
 			if attempt == maxFetchAttempts {
@@ -39,11 +39,23 @@ func (a *Adapter) fetchBody(ctx context.Context) ([]byte, error) {
 		}
 
 		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
-			body, readErr := readFeedBody(response)
-			if readErr != nil {
+			body, retryable, readErr := readFeedBody(response)
+			if readErr == nil {
+				return body, nil
+			}
+			if contextErr := ctx.Err(); contextErr != nil {
+				return nil, fmt.Errorf("fetch RSS feed: %w", contextErr)
+			}
+			if !retryable {
 				return nil, readErr
 			}
-			return body, nil
+			if attempt == maxFetchAttempts {
+				return nil, fmt.Errorf("read RSS feed after %d attempts: %w", attempt, readErr)
+			}
+			if err := a.waitBeforeRetry(ctx, retryDelay(attempt)); err != nil {
+				return nil, err
+			}
+			continue
 		}
 
 		statusErr := fmt.Errorf("unexpected HTTP status %s", response.Status)
@@ -82,19 +94,19 @@ func (a *Adapter) fetch(ctx context.Context) (*http.Response, error) {
 	return response, err
 }
 
-func readFeedBody(response *http.Response) ([]byte, error) {
+func readFeedBody(response *http.Response) ([]byte, bool, error) {
 	defer func() {
 		_ = response.Body.Close()
 	}()
 
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxFeedSize+1))
 	if err != nil {
-		return nil, fmt.Errorf("read RSS feed: %w", err)
+		return nil, true, fmt.Errorf("read RSS feed: %w", err)
 	}
 	if len(body) > maxFeedSize {
-		return nil, fmt.Errorf("read RSS feed: response exceeds %d bytes", maxFeedSize)
+		return nil, false, fmt.Errorf("read RSS feed: response exceeds %d bytes", maxFeedSize)
 	}
-	return body, nil
+	return body, false, nil
 }
 
 func (a *Adapter) waitBeforeRetry(ctx context.Context, delay time.Duration) error {
@@ -128,8 +140,12 @@ func retryAfterDelay(value string, now time.Time) (time.Duration, bool) {
 		return time.Duration(seconds) * time.Second, true
 	}
 	when, err := http.ParseTime(value)
-	if err != nil || when.Before(now) {
+	if err != nil {
 		return 0, false
 	}
-	return when.Sub(now), true
+	delay := when.Sub(now)
+	if delay < 0 {
+		delay = 0
+	}
+	return delay, true
 }

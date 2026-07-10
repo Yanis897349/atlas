@@ -177,6 +177,7 @@ type clientResult struct {
 	status     int
 	retryAfter string
 	body       []byte
+	bodyErr    error
 	err        error
 }
 
@@ -203,12 +204,24 @@ func (client *sequenceClient) Do(*http.Request) (*http.Response, error) {
 	if result.retryAfter != "" {
 		header.Set("Retry-After", result.retryAfter)
 	}
+	body := io.Reader(bytes.NewReader(result.body))
+	if result.bodyErr != nil {
+		body = failingReader{err: result.bodyErr}
+	}
 	return &http.Response{
 		Status:     http.StatusText(status),
 		StatusCode: status,
 		Header:     header,
-		Body:       io.NopCloser(bytes.NewReader(result.body)),
+		Body:       io.NopCloser(body),
 	}, nil
+}
+
+type failingReader struct {
+	err error
+}
+
+func (reader failingReader) Read([]byte) (int, error) {
+	return 0, reader.err
 }
 
 var validFeed = []byte(`<?xml version="1.0" encoding="UTF-8"?>
