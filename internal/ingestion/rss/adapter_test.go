@@ -205,6 +205,7 @@ func TestNewAdapterValidatesConfig(t *testing.T) {
 		{name: "missing source", config: rss.Config{FeedURL: "https://example.com/feed.xml"}},
 		{name: "relative feed URL", config: rss.Config{Source: "source", FeedURL: "/feed.xml"}},
 		{name: "unsupported feed URL scheme", config: rss.Config{Source: "source", FeedURL: "file:///feed.xml"}},
+		{name: "negative request budget", config: rss.Config{Source: "source", FeedURL: "https://example.com/feed.xml", RequestBudget: -time.Second}},
 	}
 
 	for _, test := range tests {

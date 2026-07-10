@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -51,6 +52,7 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
 	databaseURL, _ := isolatedApplicationDatabase(t)
 	dependencies := Dependencies{Getenv: applicationDatabaseEnv(databaseURL)}
+	dependencies.RSSWait = func(context.Context, time.Duration) error { return nil }
 	if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
 		t.Fatalf("Run(migrate) error = %v", err)
 	}

@@ -8,7 +8,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,8 +17,8 @@ import (
 )
 
 const (
-	maxFeedSize    = 10 << 20
-	defaultTimeout = 30 * time.Second
+	maxFeedSize          = 10 << 20
+	defaultRequestBudget = 30 * time.Second
 
 	// InvestingLiveSource is the normalized name of the initial Atlas RSS source.
 	InvestingLiveSource = "investinglive"
@@ -34,18 +33,22 @@ type HTTPClient interface {
 
 // Config identifies an RSS feed and its normalized source name.
 type Config struct {
-	Source  string
-	FeedURL string
-	Client  HTTPClient
-	Now     func() time.Time
+	Source        string
+	FeedURL       string
+	Client        HTTPClient
+	Now           func() time.Time
+	RequestBudget time.Duration
+	Wait          func(context.Context, time.Duration) error
 }
 
 // Adapter fetches and normalizes one configured RSS feed.
 type Adapter struct {
-	source  string
-	feedURL string
-	client  HTTPClient
-	now     func() time.Time
+	source        string
+	feedURL       string
+	client        HTTPClient
+	now           func() time.Time
+	requestBudget time.Duration
+	wait          func(context.Context, time.Duration) error
 }
 
 // NewAdapter validates config and returns an RSS adapter.
@@ -62,48 +65,40 @@ func NewAdapter(config Config) (*Adapter, error) {
 
 	client := config.Client
 	if client == nil {
-		client = &http.Client{Timeout: defaultTimeout}
+		client = &http.Client{Timeout: defaultRequestBudget}
 	}
 
 	now := config.Now
 	if now == nil {
 		now = time.Now
 	}
+	requestBudget := config.RequestBudget
+	if requestBudget < 0 {
+		return nil, errors.New("RSS request budget must not be negative")
+	}
+	if requestBudget == 0 {
+		requestBudget = defaultRequestBudget
+	}
+	wait := config.Wait
+	if wait == nil {
+		wait = waitForRetry
+	}
 
 	return &Adapter{
-		source:  source,
-		feedURL: feedURL,
-		client:  client,
-		now:     now,
+		source:        source,
+		feedURL:       feedURL,
+		client:        client,
+		now:           now,
+		requestBudget: requestBudget,
+		wait:          wait,
 	}, nil
 }
 
 // Fetch retrieves the configured feed and returns one record per unique item.
 func (a *Adapter) Fetch(ctx context.Context) ([]ingestion.SourceRecord, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.feedURL, nil)
+	body, err := a.fetchBody(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create RSS request: %w", err)
-	}
-	request.Header.Set("Accept", "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8")
-
-	response, err := a.client.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("fetch RSS feed: %w", err)
-	}
-	defer func() {
-		_ = response.Body.Close()
-	}()
-
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("fetch RSS feed: unexpected HTTP status %s", response.Status)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxFeedSize+1))
-	if err != nil {
-		return nil, fmt.Errorf("read RSS feed: %w", err)
-	}
-	if len(body) > maxFeedSize {
-		return nil, fmt.Errorf("read RSS feed: response exceeds %d bytes", maxFeedSize)
+		return nil, err
 	}
 
 	var document rssDocument

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
@@ -21,6 +22,7 @@ type Dependencies struct {
 	Getenv     func(string) string
 	HTTPClient rss.HTTPClient
 	FeedURL    string
+	RSSWait    func(context.Context, time.Duration) error
 	Stdout     io.Writer
 }
 
@@ -83,6 +85,7 @@ func runRSSIngestion(
 		Source:  rss.InvestingLiveSource,
 		FeedURL: feedURL,
 		Client:  dependencies.HTTPClient,
+		Wait:    dependencies.RSSWait,
 	})
 	if err != nil {
 		return fmt.Errorf("configure InvestingLive RSS: %w", err)
