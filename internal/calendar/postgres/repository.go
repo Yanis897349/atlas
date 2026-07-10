@@ -27,6 +27,8 @@ type Repository struct {
 	db DB
 }
 
+var _ calendar.Repository = (*Repository)(nil)
+
 // StoredEvent is a normalized economic event with its persistence metadata.
 type StoredEvent struct {
 	ID string
@@ -44,6 +46,12 @@ func NewRepository(db DB) (*Repository, error) {
 	}
 
 	return &Repository{db: db}, nil
+}
+
+// PersistEvent persists an event without returning its storage metadata.
+func (repository *Repository) PersistEvent(ctx context.Context, event calendar.Event, actor string) error {
+	_, err := repository.UpsertEvent(ctx, event, actor)
+	return err
 }
 
 // UpsertEvent inserts an event or applies metadata from a newer retrieval.
