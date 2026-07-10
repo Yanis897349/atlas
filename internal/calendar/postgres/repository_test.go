@@ -23,8 +23,8 @@ func TestRepositoryUpsertEventIsIdempotent(t *testing.T) {
 	}
 
 	initial := calendar.Event{
-		Source:          "example-calendar",
-		ExternalEventID: "us-cpi-2026-07",
+		Source:          "  example-calendar ",
+		ExternalEventID: " us-cpi-2026-07\t",
 		Name:            "Consumer Price Index",
 		Region:          calendar.RegionUnitedStates,
 		Type:            calendar.EventTypeInflation,
@@ -37,7 +37,14 @@ func TestRepositoryUpsertEventIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first UpsertEvent() error = %v", err)
 	}
-	retried, err := repository.UpsertEvent(t.Context(), initial, "retry-worker")
+	if created.Source != "example-calendar" || created.ExternalEventID != "us-cpi-2026-07" {
+		t.Errorf("stored identity = (%q, %q), want normalized identity", created.Source, created.ExternalEventID)
+	}
+
+	retry := initial
+	retry.Source = "example-calendar"
+	retry.ExternalEventID = "us-cpi-2026-07"
+	retried, err := repository.UpsertEvent(t.Context(), retry, "retry-worker")
 	if err != nil {
 		t.Fatalf("retry UpsertEvent() error = %v", err)
 	}

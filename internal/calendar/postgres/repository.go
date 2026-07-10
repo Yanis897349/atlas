@@ -50,6 +50,8 @@ func (repository *Repository) UpsertEvent(
 	actor string,
 ) (StoredEvent, error) {
 	actor = strings.TrimSpace(actor)
+	event.Source = strings.TrimSpace(event.Source)
+	event.ExternalEventID = strings.TrimSpace(event.ExternalEventID)
 	if err := validateEvent(event, actor); err != nil {
 		return StoredEvent{}, err
 	}
