@@ -1,0 +1,20 @@
+CREATE TABLE source_records (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    source text NOT NULL,
+    source_item_id text NOT NULL,
+    original_url text NOT NULL,
+    title text NOT NULL,
+    published_at timestamptz NOT NULL,
+    retrieved_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+    created_by text NOT NULL,
+    updated_by text NOT NULL,
+    CONSTRAINT uq_source_records_source_source_item_id UNIQUE (source, source_item_id),
+    CONSTRAINT chk_source_records_source_nonempty CHECK (btrim(source) <> ''),
+    CONSTRAINT chk_source_records_source_item_id_nonempty CHECK (btrim(source_item_id) <> ''),
+    CONSTRAINT chk_source_records_original_url_nonempty CHECK (btrim(original_url) <> ''),
+    CONSTRAINT chk_source_records_title_nonempty CHECK (btrim(title) <> ''),
+    CONSTRAINT chk_source_records_created_by_nonempty CHECK (btrim(created_by) <> ''),
+    CONSTRAINT chk_source_records_updated_by_nonempty CHECK (btrim(updated_by) <> '')
+);
