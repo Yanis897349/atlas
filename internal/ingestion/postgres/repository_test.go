@@ -2,14 +2,12 @@ package postgres_test
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
+	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/jackc/pgx/v5"
@@ -180,56 +178,11 @@ func TestNewRepositoryRequiresDatabase(t *testing.T) {
 func openTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("ATLAS_TEST_DATABASE_URL is not set")
-	}
-
-	adminPool, err := pgxpool.New(t.Context(), databaseURL)
-	if err != nil {
-		t.Fatalf("connect to test PostgreSQL: %v", err)
-	}
-	t.Cleanup(adminPool.Close)
-	if err := adminPool.Ping(t.Context()); err != nil {
-		t.Fatalf("ping test PostgreSQL: %v", err)
-	}
-
-	schema := "atlas_test_" + randomHex(t, 8)
-	if _, err := adminPool.Exec(t.Context(), `CREATE SCHEMA `+schema); err != nil {
-		t.Fatalf("create test schema: %v", err)
-	}
-	t.Cleanup(func() {
-		if _, err := adminPool.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`); err != nil {
-			t.Errorf("drop test schema: %v", err)
-		}
-	})
-
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatalf("parse test database URL: %v", err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		t.Fatalf("connect to isolated test schema: %v", err)
-	}
-	t.Cleanup(pool.Close)
-
-	if err := databasepostgres.Migrate(t.Context(), pool); err != nil {
+	database := postgrestest.Open(t)
+	if err := databasepostgres.Migrate(t.Context(), database.Pool); err != nil {
 		t.Fatalf("apply database migrations: %v", err)
 	}
-
-	return pool
-}
-
-func randomHex(t *testing.T, size int) string {
-	t.Helper()
-
-	value := make([]byte, size)
-	if _, err := rand.Read(value); err != nil {
-		t.Fatalf("generate test schema name: %v", err)
-	}
-	return hex.EncodeToString(value)
+	return database.Pool
 }
 
 func assertSourceRecordCount(t *testing.T, pool *pgxpool.Pool, want int) {

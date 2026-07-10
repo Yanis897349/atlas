@@ -2,22 +2,18 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 )
 
 func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
-	databaseURL, applicationPool := isolatedApplicationDatabase(t)
+	database := postgrestest.Open(t)
 	feed := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		response.Header().Set("Content-Type", "application/rss+xml")
 		_, _ = response.Write([]byte(testFeed))
@@ -25,7 +21,7 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 	t.Cleanup(feed.Close)
 
 	dependencies := Dependencies{
-		Getenv:     applicationDatabaseEnv(databaseURL),
+		Getenv:     applicationDatabaseEnv(database.URL),
 		HTTPClient: feed.Client(),
 		FeedURL:    feed.URL,
 	}
@@ -41,13 +37,13 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 	}
 
 	var count int
-	if err := applicationPool.QueryRow(t.Context(), "SELECT count(*) FROM source_records").Scan(&count); err != nil {
+	if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM source_records").Scan(&count); err != nil {
 		t.Fatalf("count source records: %v", err)
 	}
 	if count != 2 {
 		t.Errorf("source record count = %d, want 2", count)
 	}
-	if err := applicationPool.QueryRow(t.Context(), "SELECT count(*) FROM economic_events").Scan(&count); err != nil {
+	if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM economic_events").Scan(&count); err != nil {
 		t.Fatalf("count economic events: %v", err)
 	}
 	if count != 0 {
@@ -56,8 +52,8 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 }
 
 func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
-	databaseURL, _ := isolatedApplicationDatabase(t)
-	dependencies := Dependencies{Getenv: applicationDatabaseEnv(databaseURL)}
+	database := postgrestest.Open(t)
+	dependencies := Dependencies{Getenv: applicationDatabaseEnv(database.URL)}
 	dependencies.RSSWait = func(context.Context, time.Duration) error { return nil }
 	if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
 		t.Fatalf("Run(migrate) error = %v", err)
@@ -102,45 +98,6 @@ func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
 	})
 }
 
-func isolatedApplicationDatabase(t *testing.T) (string, *pgxpool.Pool) {
-	t.Helper()
-
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("ATLAS_TEST_DATABASE_URL is not set")
-	}
-	adminPool, err := pgxpool.New(t.Context(), databaseURL)
-	if err != nil {
-		t.Fatalf("connect to test PostgreSQL: %v", err)
-	}
-	t.Cleanup(adminPool.Close)
-
-	schema := "atlas_app_test_" + randomSchemaSuffix(t)
-	if _, err := adminPool.Exec(t.Context(), `CREATE SCHEMA `+schema); err != nil {
-		t.Fatalf("create test schema: %v", err)
-	}
-	t.Cleanup(func() {
-		if _, err := adminPool.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`); err != nil {
-			t.Errorf("drop test schema: %v", err)
-		}
-	})
-
-	parsed, err := url.Parse(databaseURL)
-	if err != nil {
-		t.Fatalf("parse test database URL: %v", err)
-	}
-	query := parsed.Query()
-	query.Set("search_path", schema)
-	parsed.RawQuery = query.Encode()
-	applicationURL := parsed.String()
-	applicationPool, err := pgxpool.New(t.Context(), applicationURL)
-	if err != nil {
-		t.Fatalf("connect to isolated application schema: %v", err)
-	}
-	t.Cleanup(applicationPool.Close)
-	return applicationURL, applicationPool
-}
-
 func applicationDatabaseEnv(databaseURL string) func(string) string {
 	return func(name string) string {
 		if name == "ATLAS_DATABASE_URL" {
@@ -148,15 +105,6 @@ func applicationDatabaseEnv(databaseURL string) func(string) string {
 		}
 		return ""
 	}
-}
-
-func randomSchemaSuffix(t *testing.T) string {
-	t.Helper()
-	value := make([]byte, 8)
-	if _, err := rand.Read(value); err != nil {
-		t.Fatalf("generate test schema name: %v", err)
-	}
-	return hex.EncodeToString(value)
 }
 
 const testFeed = `<?xml version="1.0" encoding="UTF-8"?>
