@@ -161,37 +161,14 @@ func (a *Adapter) normalize(item rssItem, retrievedAt time.Time) (ingestion.Sour
 
 func validateHTTPURL(rawURL string) (string, error) {
 	trimmed := strings.TrimSpace(rawURL)
-	parsed, err := url.ParseRequestURI(trimmed)
+	parsed, err := url.Parse(trimmed)
 	if err != nil {
 		return "", err
 	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
 		return "", errors.New("must be an absolute HTTP(S) URL")
 	}
 	return parsed.String(), nil
-}
-
-func parsePublicationTime(value string) (time.Time, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return time.Time{}, errors.New("publication time is required")
-	}
-
-	formats := []string{
-		time.RFC1123Z,
-		time.RFC1123,
-		time.RFC822Z,
-		time.RFC822,
-		time.RFC3339,
-	}
-	for _, format := range formats {
-		publishedAt, err := time.Parse(format, value)
-		if err == nil {
-			return publishedAt.UTC(), nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("invalid publication time %q", value)
 }
 
 func sourceItemID(source, identity string) string {

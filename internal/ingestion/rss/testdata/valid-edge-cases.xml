@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Central Bank</title>
+    <link>https://example.com/</link>
+    <description>Policy releases</description>
+    <item>
+      <guid isPermaLink="false">report-with-fragment-and-named-zone</guid>
+      <link>https://example.com/releases/report#details</link>
+      <title>Regional policy report</title>
+      <pubDate>Thu, 09 Jul 2026 07:00:00 EST</pubDate>
+    </item>
+  </channel>
+</rss>

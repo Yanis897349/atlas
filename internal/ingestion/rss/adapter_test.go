@@ -99,6 +99,34 @@ func TestAdapterFetchSupportsInvestingLiveFixture(t *testing.T) {
 	}
 }
 
+func TestAdapterFetchPreservesURLFragmentsAndNamedZoneOffsets(t *testing.T) {
+	adapter, err := rss.NewAdapter(rss.Config{
+		Source:  "example-central-bank",
+		FeedURL: "https://example.com/feed.xml",
+		Client:  fixtureClient(t, "valid-edge-cases.xml"),
+	})
+	if err != nil {
+		t.Fatalf("NewAdapter() error = %v", err)
+	}
+
+	records, err := adapter.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Fetch() returned %d records, want 1", len(records))
+	}
+
+	record := records[0]
+	if record.OriginalURL != "https://example.com/releases/report#details" {
+		t.Errorf("OriginalURL = %q", record.OriginalURL)
+	}
+	wantPublishedAt := time.Date(2026, time.July, 9, 12, 0, 0, 0, time.UTC)
+	if !record.PublishedAt.Equal(wantPublishedAt) {
+		t.Errorf("PublishedAt = %v, want %v", record.PublishedAt, wantPublishedAt)
+	}
+}
+
 func TestAdapterFetchKeepsIdentityAcrossRepeatedIngestion(t *testing.T) {
 	now := time.Date(2026, time.July, 10, 10, 0, 0, 0, time.UTC)
 	adapter, err := rss.NewAdapter(rss.Config{
