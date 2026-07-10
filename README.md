@@ -141,11 +141,13 @@ Source Scoring           Topic Classification
 
 ## Development
 
-Atlas uses Go 1.26.5, pinned in `.mise.toml`. Install and activate it with mise, then run the backend test suite:
+Atlas uses Go 1.26.5, pinned in `.mise.toml` and `go.mod`. Install and activate it with mise, then run the complete local quality suite:
 
 ```sh
 mise install
-mise exec -- go test ./...
+mise exec -- make ci
 ```
+
+During development, run `mise exec -- make fmt` to format Go files and `mise exec -- make check` after every change. The check target verifies formatting, runs the pinned golangci-lint suite, checks that the module files are tidy, and runs the tests. The CI target adds the race detector. GitHub Actions enforces the same checks on pushes and pull requests.
 
 The initial supported source is the [InvestingLive RSS feed](https://investinglive.com/feed/). The RSS 2.0 adapter normalizes feed items without persistence. Source item identity is a SHA-256 digest of the configured source and the entry GUID, falling back to the original URL when no GUID is present; exact repeated identities within one response are emitted once.

@@ -90,7 +90,9 @@ func (a *Adapter) Fetch(ctx context.Context) ([]ingestion.SourceRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch RSS feed: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("fetch RSS feed: unexpected HTTP status %s", response.Status)
