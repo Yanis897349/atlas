@@ -7,7 +7,10 @@ import (
 	"net/http"
 )
 
-const maxCalendarSize = 10 << 20
+const (
+	maxCalendarSize = 10 << 20
+	userAgent       = "Atlas (+https://github.com/Yanis897349/atlas)"
+)
 
 func (adapter *Adapter) fetchBody(ctx context.Context) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, adapter.requestBudget)
@@ -18,6 +21,7 @@ func (adapter *Adapter) fetchBody(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("create BLS calendar request: %w", err)
 	}
 	request.Header.Set("Accept", "text/calendar")
+	request.Header.Set("User-Agent", userAgent)
 
 	response, err := adapter.client.Do(request)
 	if err != nil {

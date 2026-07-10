@@ -62,6 +62,9 @@ func TestAdapterFetchEventsNormalizesSupportedReleases(t *testing.T) {
 	if client.method != http.MethodGet || client.accept != "text/calendar" {
 		t.Errorf("request = %s with Accept %q, want GET with text/calendar", client.method, client.accept)
 	}
+	if client.userAgent != "Atlas (+https://github.com/Yanis897349/atlas)" {
+		t.Errorf("User-Agent = %q, want identifiable Atlas project URL", client.userAgent)
+	}
 }
 
 func TestAdapterFetchEventsKeepsIdentityAcrossRetrievals(t *testing.T) {
@@ -232,16 +235,18 @@ func newAdapter(
 }
 
 type recordingClient struct {
-	contents []byte
-	requests int
-	method   string
-	accept   string
+	contents  []byte
+	requests  int
+	method    string
+	accept    string
+	userAgent string
 }
 
 func (client *recordingClient) Do(request *http.Request) (*http.Response, error) {
 	client.requests++
 	client.method = request.Method
 	client.accept = request.Header.Get("Accept")
+	client.userAgent = request.Header.Get("User-Agent")
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewReader(client.contents)),
