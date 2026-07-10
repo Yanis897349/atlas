@@ -88,6 +88,12 @@ func (repository *Repository) UpsertSourceRecord(
 	return stored, nil
 }
 
+// PersistSourceRecord stores a source record for the ingestion service.
+func (repository *Repository) PersistSourceRecord(ctx context.Context, record ingestion.SourceRecord, actor string) error {
+	_, err := repository.UpsertSourceRecord(ctx, record, actor)
+	return err
+}
+
 func scanSourceRecord(row pgx.Row) (StoredSourceRecord, error) {
 	var record StoredSourceRecord
 	err := row.Scan(
