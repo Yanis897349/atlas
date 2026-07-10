@@ -4,7 +4,11 @@
 
 Atlas is an open-source macro intelligence platform. It ingests financial news, economic events, government publications, and market data, then turns them into deterministic, source-cited context, narratives, briefs, and watchlists. Atlas supports analysis; it does not predict markets.
 
-The project is at an early stage. Preserve source traceability, deterministic ingestion, explicit domain boundaries, and rollout-safe changes as the architecture evolves.
+The project is at an early stage. Preserve source traceability, deterministic ingestion, and explicit domain boundaries as the architecture evolves.
+
+## Pre-production database policy
+
+Atlas is not live, and development and test databases are disposable. Prefer resetting the database and keeping schema changes simple over preserving old development data or supporting legacy schemas. Do not add compatibility fallbacks, schema baselining, transitional backfills, or other rollout machinery unless the user explicitly requires an upgrade path. This project-specific policy overrides general rollout-safety defaults until Atlas enters production.
 
 ## Required workflow
 
