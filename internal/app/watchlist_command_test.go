@@ -50,6 +50,11 @@ func TestRunRejectsInvalidWatchlistArgumentsBeforeDatabaseSetup(t *testing.T) {
 		{name: "normalized duplicate symbol", arguments: append(append([]string(nil), validCreate...), "--symbol", " spy "), contains: "--symbol \"SPY\" is duplicated"},
 		{name: "create unknown flag", arguments: append(append([]string(nil), validCreate...), "--format", "yaml"), contains: "flag provided but not defined"},
 		{name: "create positional argument", arguments: append(append([]string(nil), validCreate...), "extra"), contains: "unexpected positional arguments"},
+		{name: "lookup missing ID", arguments: []string{"watchlist"}, contains: "--id is required"},
+		{name: "lookup malformed ID", arguments: []string{"watchlist", "--id", "not-a-uuid"}, contains: "--id must be a UUID"},
+		{name: "lookup repeated ID", arguments: []string{"watchlist", "--id", "00000000-0000-0000-0000-000000000001", "--id", "00000000-0000-0000-0000-000000000002"}, contains: "must only be provided once"},
+		{name: "lookup unknown flag", arguments: []string{"watchlist", "--id", "00000000-0000-0000-0000-000000000001", "--format", "yaml"}, contains: "flag provided but not defined"},
+		{name: "lookup positional argument", arguments: []string{"watchlist", "--id", "00000000-0000-0000-0000-000000000001", "extra"}, contains: "unexpected positional arguments"},
 		{name: "missing limit", arguments: []string{"watchlists"}, contains: "--limit is required"},
 		{name: "zero limit", arguments: []string{"watchlists", "--limit", "0"}, contains: "--limit must be between 1 and 100"},
 		{name: "limit above maximum", arguments: []string{"watchlists", "--limit", "101"}, contains: "--limit must be between 1 and 100"},
@@ -77,6 +82,16 @@ func TestParseWatchlistsQuery(t *testing.T) {
 	}
 	if query.limit != 12 {
 		t.Errorf("query limit = %d, want 12", query.limit)
+	}
+}
+
+func TestParseWatchlistQuery(t *testing.T) {
+	query, err := parseWatchlistQuery([]string{"--id", "00000000-0000-0000-0000-000000000012"})
+	if err != nil {
+		t.Fatalf("parseWatchlistQuery() error = %v", err)
+	}
+	if query.id != "00000000-0000-0000-0000-000000000012" {
+		t.Errorf("query ID = %q, want supplied UUID", query.id)
 	}
 }
 
@@ -137,6 +152,30 @@ func TestRunWatchlistsPreservesRepositoryOrderAndWritesEmptyArray(t *testing.T) 
 	}
 }
 
+func TestRunWatchlistWritesCompleteJSON(t *testing.T) {
+	repository := &watchlistRepositoryStub{watchlist: storedWatchlistFixture()}
+	stdout := &bytes.Buffer{}
+	query := watchlistQuery{id: "00000000-0000-0000-0000-000000000001"}
+
+	if err := runWatchlist(t.Context(), repository, stdout, query); err != nil {
+		t.Fatalf("runWatchlist() error = %v", err)
+	}
+
+	var output watchlistOutput
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if repository.lookupCalls != 1 || repository.id != query.id {
+		t.Errorf("repository lookup = (%d, %q), want (1, %q)", repository.lookupCalls, repository.id, query.id)
+	}
+	if output.ID != query.id || output.Name != "Macro & rates" ||
+		!reflect.DeepEqual(output.Symbols, []string{"EURUSD", "SPY"}) || output.CreatedBy != "analyst" ||
+		output.UpdatedBy != "analyst" || output.CreatedAt != "2026-07-12T08:00:00.123456789Z" ||
+		output.UpdatedAt != "2026-07-12T08:00:00.123456789Z" {
+		t.Errorf("output = %#v, want complete canonical watchlist", output)
+	}
+}
+
 func TestRunWatchlistCommandsPreserveFailures(t *testing.T) {
 	wantErr := errors.New("watchlists unavailable")
 	tests := []struct {
@@ -157,6 +196,12 @@ func TestRunWatchlistCommandsPreserveFailures(t *testing.T) {
 		}},
 		{name: "list writer", writer: errorWriter{err: wantErr}, contains: "encode watchlists", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
 			return runWatchlists(t.Context(), r, stdout, watchlistsQuery{limit: 10})
+		}},
+		{name: "lookup cancellation", err: context.Canceled, contains: "retrieve watchlist", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
+			return runWatchlist(t.Context(), r, stdout, watchlistQuery{id: "00000000-0000-0000-0000-000000000001"})
+		}},
+		{name: "lookup writer", writer: errorWriter{err: wantErr}, contains: "encode watchlist", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
+			return runWatchlist(t.Context(), r, stdout, watchlistQuery{id: "00000000-0000-0000-0000-000000000001"})
 		}},
 	}
 	for _, test := range tests {
@@ -204,12 +249,15 @@ func storedWatchlistFixture() watchlist.StoredWatchlist {
 }
 
 type watchlistRepositoryStub struct {
+	watchlist   watchlist.StoredWatchlist
 	watchlists  []watchlist.StoredWatchlist
 	err         error
 	definition  watchlist.Definition
 	actor       string
+	id          string
 	limit       int
 	createCalls int
+	lookupCalls int
 	listCalls   int
 }
 
@@ -231,8 +279,10 @@ func (repository *watchlistRepositoryStub) CreateWatchlist(
 	return stored, nil
 }
 
-func (repository *watchlistRepositoryStub) Watchlist(context.Context, string) (watchlist.StoredWatchlist, error) {
-	panic("Watchlist must not be called")
+func (repository *watchlistRepositoryStub) Watchlist(_ context.Context, id string) (watchlist.StoredWatchlist, error) {
+	repository.lookupCalls++
+	repository.id = id
+	return repository.watchlist, repository.err
 }
 
 func (repository *watchlistRepositoryStub) Watchlists(_ context.Context, limit int) ([]watchlist.StoredWatchlist, error) {

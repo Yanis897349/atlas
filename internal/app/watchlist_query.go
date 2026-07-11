@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/Yanis897349/atlas/internal/watchlist"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const (
 	createWatchlistUsage = "usage: atlas create-watchlist --name <name> --actor <actor> --symbol <symbol> [--symbol <symbol> ...]"
+	watchlistUsage       = "usage: atlas watchlist --id <uuid>"
 	watchlistsUsage      = "usage: atlas watchlists --limit <1-100>"
 )
 
@@ -21,6 +23,28 @@ type createWatchlistCommand struct {
 
 type watchlistsQuery struct {
 	limit int
+}
+
+type watchlistQuery struct {
+	id string
+}
+
+type singleString struct {
+	value    string
+	provided bool
+}
+
+func (value *singleString) String() string {
+	return value.value
+}
+
+func (value *singleString) Set(input string) error {
+	if value.provided {
+		return fmt.Errorf("must only be provided once")
+	}
+	value.value = input
+	value.provided = true
+	return nil
 }
 
 type repeatedStrings []string
@@ -129,6 +153,32 @@ func parseWatchlistsQuery(arguments []string) (watchlistsQuery, error) {
 		)
 	}
 	return watchlistsQuery{limit: limit}, nil
+}
+
+func parseWatchlistQuery(arguments []string) (watchlistQuery, error) {
+	flags := flag.NewFlagSet("watchlist", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var id singleString
+	flags.Var(&id, "id", "watchlist UUID")
+	if err := flags.Parse(arguments); err != nil {
+		return watchlistQuery{}, invalidWatchlistArguments("watchlist", watchlistUsage, err)
+	}
+	if flags.NArg() != 0 {
+		return watchlistQuery{}, invalidWatchlistArguments(
+			"watchlist", watchlistUsage, fmt.Errorf("unexpected positional arguments"),
+		)
+	}
+	if !id.provided {
+		return watchlistQuery{}, invalidWatchlistArguments("watchlist", watchlistUsage, fmt.Errorf("--id is required"))
+	}
+
+	var parsed pgtype.UUID
+	if err := parsed.Scan(id.value); err != nil || !parsed.Valid {
+		return watchlistQuery{}, invalidWatchlistArguments(
+			"watchlist", watchlistUsage, fmt.Errorf("--id must be a UUID"),
+		)
+	}
+	return watchlistQuery{id: id.value}, nil
 }
 
 func invalidWatchlistArguments(commandName, usage string, err error) error {

@@ -3,11 +3,13 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestRunCreatesAndListsWatchlistsEndToEnd(t *testing.T) {
@@ -65,6 +67,29 @@ SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
 		!reflect.DeepEqual(output[0].Symbols, []string{"BRK.B"}) || output[0].CreatedBy != "second-user" ||
 		output[0].CreatedAt != "2026-07-12T09:00:00Z" {
 		t.Errorf("listed output = %#v, want newest complete watchlist", output)
+	}
+
+	stdout.Reset()
+	if err := Run(t.Context(), []string{"watchlist", "--id", first.ID}, dependencies); err != nil {
+		t.Fatalf("Run(watchlist) error = %v", err)
+	}
+	var lookup watchlistOutput
+	if err := json.Unmarshal(stdout.Bytes(), &lookup); err != nil {
+		t.Fatalf("decode looked-up watchlist: %v", err)
+	}
+	if lookup.ID != first.ID || lookup.Name != "First" ||
+		!reflect.DeepEqual(lookup.Symbols, []string{"EURUSD", "SPY"}) || lookup.CreatedBy != "first-user" ||
+		lookup.UpdatedBy != "first-user" || lookup.CreatedAt != "2026-07-12T08:00:00Z" {
+		t.Errorf("looked-up output = %#v, want complete first watchlist", lookup)
+	}
+
+	stdout.Reset()
+	err := Run(t.Context(), []string{"watchlist", "--id", "00000000-0000-0000-0000-000000000000"}, dependencies)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("Run(watchlist missing) error = %v, want pgx.ErrNoRows", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("missing watchlist stdout = %q, want no output", stdout.String())
 	}
 
 	var auditedInstruments int

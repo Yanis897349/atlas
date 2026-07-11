@@ -50,6 +50,19 @@ func runWatchlists(
 	return encodeCommandJSON(stdout, "watchlists", output)
 }
 
+func runWatchlist(
+	ctx context.Context,
+	repository watchlist.Reader,
+	stdout io.Writer,
+	query watchlistQuery,
+) error {
+	stored, err := repository.Watchlist(ctx, query.id)
+	if err != nil {
+		return fmt.Errorf("retrieve watchlist: %w", err)
+	}
+	return encodeCommandJSON(stdout, "watchlist", newWatchlistOutput(stored))
+}
+
 func newWatchlistOutput(stored watchlist.StoredWatchlist) watchlistOutput {
 	return watchlistOutput{
 		ID:        stored.ID,
