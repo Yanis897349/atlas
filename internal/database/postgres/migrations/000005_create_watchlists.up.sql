@@ -26,7 +26,7 @@ CREATE TABLE watchlist_instruments (
     CONSTRAINT uq_watchlist_instruments_watchlist_symbol UNIQUE (watchlist_id, symbol),
     CONSTRAINT chk_watchlist_instruments_position CHECK (position >= 0),
     CONSTRAINT chk_watchlist_instruments_symbol_nonempty CHECK (btrim(symbol) <> ''),
-    CONSTRAINT chk_watchlist_instruments_symbol_canonical CHECK (symbol = btrim(symbol) AND symbol = upper(symbol)),
+    CONSTRAINT chk_watchlist_instruments_symbol_trimmed CHECK (symbol = btrim(symbol)),
     CONSTRAINT chk_watchlist_instruments_created_by_nonempty CHECK (btrim(created_by) <> ''),
     CONSTRAINT chk_watchlist_instruments_updated_by_nonempty CHECK (btrim(updated_by) <> '')
 );

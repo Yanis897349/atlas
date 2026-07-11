@@ -65,6 +65,34 @@ WHERE created_by = 'watchlist-user' AND updated_by = 'watchlist-user'
 	}
 }
 
+func TestRepositoryPersistsUnicodeSymbolsWithGoCanonicalization(t *testing.T) {
+	database := openDatabase(t)
+	repository, _ := NewRepository(database.Pool)
+	input := []string{"ß", "é", "ﬀ"}
+	want := make([]string, len(input))
+	for index, symbol := range input {
+		want[index] = strings.ToUpper(symbol)
+	}
+
+	stored, err := repository.CreateWatchlist(t.Context(), watchlist.Definition{
+		Name: "Unicode", Symbols: input,
+	}, "watchlist-user")
+	if err != nil {
+		t.Fatalf("CreateWatchlist() error = %v", err)
+	}
+	if !reflect.DeepEqual(stored.Symbols, want) {
+		t.Fatalf("CreateWatchlist() symbols = %v, want %v", stored.Symbols, want)
+	}
+
+	got, err := repository.Watchlist(t.Context(), stored.ID)
+	if err != nil {
+		t.Fatalf("Watchlist() error = %v", err)
+	}
+	if !reflect.DeepEqual(got.Symbols, want) {
+		t.Errorf("Watchlist() symbols = %v, want %v", got.Symbols, want)
+	}
+}
+
 func TestRepositoryWatchlistsOrdersAndLimits(t *testing.T) {
 	database := openDatabase(t)
 	repository, _ := NewRepository(database.Pool)
@@ -171,8 +199,8 @@ VALUES ($1, $2, $3, 'user', 'user')
 `, watchlistID, position, symbol)
 		return err
 	}
-	if err := insertInstrument(0, "eurusd"); err == nil {
-		t.Error("non-canonical symbol insert succeeded")
+	if err := insertInstrument(0, " EURUSD "); err == nil {
+		t.Error("untrimmed symbol insert succeeded")
 	}
 	if err := insertInstrument(-1, "NEGATIVE"); err == nil {
 		t.Error("negative position insert succeeded")
