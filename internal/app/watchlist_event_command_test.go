@@ -245,6 +245,12 @@ func (repository *eventLinkRepositoryStub) CreateEventLink(
 	return repository.links[0], nil
 }
 
+func (repository *eventLinkRepositoryStub) DeleteEventLink(
+	_ context.Context, _, _, _ string,
+) error {
+	return repository.err
+}
+
 func (repository *eventLinkRepositoryStub) EventLinks(
 	_ context.Context, watchlistID, symbol string, limit int,
 ) ([]watchlist.StoredEventLink, error) {

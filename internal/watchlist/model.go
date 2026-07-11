@@ -55,9 +55,10 @@ type Reader interface {
 	Watchlists(context.Context, int) ([]StoredWatchlist, error)
 }
 
-// EventLinkPersistence creates explicit watchlist-instrument event links.
+// EventLinkPersistence creates and deletes explicit watchlist-instrument event links.
 type EventLinkPersistence interface {
 	CreateEventLink(context.Context, string, string, string, string) (StoredEventLink, error)
+	DeleteEventLink(context.Context, string, string, string) error
 }
 
 // EventLinkReader retrieves linked events for one watchlist instrument.

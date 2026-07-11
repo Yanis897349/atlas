@@ -63,22 +63,31 @@ func normalizeAndValidateEventLink(
 	eventID string,
 	actor string,
 ) (string, string, error) {
-	if err := validateWatchlistID(watchlistID); err != nil {
-		return "", "", err
-	}
-	if err := validateEventID(eventID); err != nil {
+	symbol, err := normalizeAndValidateEventLinkReference(watchlistID, symbol, eventID)
+	if err != nil {
 		return "", "", err
 	}
 
-	symbol = normalizeInstrumentSymbol(symbol)
 	actor = strings.TrimSpace(actor)
-	if symbol == "" {
-		return "", "", errors.New("instrument symbol is required")
-	}
 	if actor == "" {
 		return "", "", errors.New("actor is required")
 	}
 	return symbol, actor, nil
+}
+
+func normalizeAndValidateEventLinkReference(watchlistID string, symbol string, eventID string) (string, error) {
+	if err := validateWatchlistID(watchlistID); err != nil {
+		return "", err
+	}
+	if err := validateEventID(eventID); err != nil {
+		return "", err
+	}
+
+	symbol = normalizeInstrumentSymbol(symbol)
+	if symbol == "" {
+		return "", errors.New("instrument symbol is required")
+	}
+	return symbol, nil
 }
 
 func normalizeAndValidateEventLinksQuery(watchlistID string, symbol string, limit int) (string, error) {
