@@ -142,6 +142,17 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			stdout,
 			parsedCommand.dailyBriefInputQuery,
 		)
+	case "daily-briefs":
+		briefRepository, err := newDailyBriefRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure daily brief repository: %w", err)
+		}
+		return runStoredDailyBriefs(
+			ctx,
+			briefRepository,
+			stdout,
+			parsedCommand.storedDailyBriefsQuery,
+		)
 	default:
 		panic("validated command is not handled")
 	}

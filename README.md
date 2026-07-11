@@ -206,6 +206,11 @@ mise exec -- go run ./cmd/atlas daily-brief \
   --event-from 2026-07-11T12:00:00Z \
   --event-to 2026-07-18T12:00:00Z \
   --upcoming-event-limit 25
+mise exec -- go run ./cmd/atlas daily-briefs \
+  --region united_states \
+  --from 2026-07-01T00:00:00Z \
+  --to 2026-08-01T00:00:00Z \
+  --limit 25
 ```
 
 `migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, `ingest-census`, `ingest-eurostat`, and `ingest-spglobal` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, national GDP estimates from the official BEA release schedule, retail-sales releases from the official Census calendar, current-year Euro-area quarterly GDP and monthly retail-sales releases from the official Eurostat calendar, and Eurozone flash PMI releases from the S&P Global PMI calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
@@ -215,3 +220,5 @@ mise exec -- go run ./cmd/atlas daily-brief \
 `daily-brief-input` reads recent source records and region-specific upcoming events over separate inclusive RFC 3339 windows. The source-record and upcoming-event limits are independent and must each be from 1 through 100. The command emits a deterministic JSON envelope containing the UTC query windows, newest-first source records, and chronologically ordered events with their source identities and citation URLs; it does not generate prose, call an AI provider, or modify records.
 
 `daily-brief` accepts the same windows and limits, requires `ATLAS_OPENAI_API_KEY` and `ATLAS_OPENAI_MODEL`, and sends the assembled deterministic input to the OpenAI Responses API. After validating the generated sections and resolving canonical source-record or upcoming-event citations from PostgreSQL, it atomically persists an immutable brief with its UUID, input windows, provider and model provenance, ordered content, citations, and audit metadata. The command emits that complete stored record as JSON; provider-supplied URLs are never trusted, and failed generation or validation does not create a brief. Each invocation performs one bounded provider request without retries. Regeneration policy, scheduling, HTTP delivery, and UI presentation are not part of this command.
+
+`daily-briefs` reads persisted briefs for one supported region over an inclusive RFC 3339 creation window, with a limit from 1 through 100. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each brief's original input windows, provider and model provenance, ordered sections and canonical citations, and audit metadata. The command does not call an AI provider or modify stored briefs.
