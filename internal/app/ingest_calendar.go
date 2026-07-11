@@ -9,16 +9,18 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar/bea"
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
 	"github.com/Yanis897349/atlas/internal/calendar/ecb"
+	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
-	beaIngestionActor = "atlas-bea-calendar-ingestion"
-	blsIngestionActor = "atlas-bls-calendar-ingestion"
-	ecbIngestionActor = "atlas-ecb-calendar-ingestion"
-	fedIngestionActor = "atlas-fed-calendar-ingestion"
+	beaIngestionActor      = "atlas-bea-calendar-ingestion"
+	blsIngestionActor      = "atlas-bls-calendar-ingestion"
+	ecbIngestionActor      = "atlas-ecb-calendar-ingestion"
+	eurostatIngestionActor = "atlas-eurostat-calendar-ingestion"
+	fedIngestionActor      = "atlas-fed-calendar-ingestion"
 )
 
 type calendarIngestionCommand struct {
@@ -78,6 +80,19 @@ var calendarIngestionCommands = []calendarIngestionCommand{
 				Client:        dependencies.BEA.HTTPClient,
 				Now:           dependencies.BEA.Now,
 				RequestBudget: dependencies.BEA.RequestBudget,
+			})
+		},
+	},
+	{
+		name:         "ingest-eurostat",
+		calendarName: "Eurostat calendar",
+		actor:        eurostatIngestionActor,
+		newAdapter: func(dependencies Dependencies) (calendar.Adapter, error) {
+			return eurostat.NewAdapter(eurostat.Config{
+				EventsURL:     dependencies.Eurostat.CalendarURL,
+				Client:        dependencies.Eurostat.HTTPClient,
+				Now:           dependencies.Eurostat.Now,
+				RequestBudget: dependencies.Eurostat.RequestBudget,
 			})
 		},
 	},

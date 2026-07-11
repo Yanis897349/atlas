@@ -13,6 +13,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar/bea"
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
 	"github.com/Yanis897349/atlas/internal/calendar/ecb"
+	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 )
@@ -265,6 +266,29 @@ func calendarCommandTests() []calendarCommandTest {
 				dependencies.ECB.CalendarURL = url
 			},
 		},
+		{
+			name:                 "Eurostat",
+			command:              "ingest-eurostat",
+			source:               eurostat.Source,
+			actor:                eurostatIngestionActor,
+			canonicalURL:         eurostat.CalendarURL,
+			contentType:          "application/json",
+			body:                 testEurostatCalendar,
+			correctedBody:        strings.Replace(testEurostatCalendar, "2026-02-13T12:00:00+01:00", "2026-02-14T12:00:00+01:00", 1),
+			correctedScheduledAt: time.Date(2026, time.February, 14, 11, 0, 0, 0, time.UTC),
+			eventCount:           2,
+			output:               "ingested 2 Eurostat calendar events\n",
+			configurationError:   "configure Eurostat calendar: invalid Eurostat calendar URL",
+			retrievalError:       "ingest Eurostat calendar: fetch economic events: fetch Eurostat calendar",
+			persistenceError:     "ingest Eurostat calendar: persist economic event 1: upsert economic event",
+			ingestionError:       "ingest Eurostat calendar",
+			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
+				dependencies.Eurostat = calendarSourceDependencies(server, now)
+			},
+			setURL: func(dependencies *Dependencies, url string) {
+				dependencies.Eurostat.CalendarURL = url
+			},
+		},
 	}
 }
 
@@ -346,3 +370,16 @@ const testECBCalendar = `<!doctype html>
     </dl>
   </div>
 </body></html>`
+
+const testEurostatCalendar = `[
+  {
+    "period": "Q4/2025",
+    "start": "2026-01-30T11:00:00Z",
+    "title": "Preliminary flash estimate GDP - EU and euro area"
+  },
+  {
+    "period": "Q4/2025",
+    "start": "2026-02-13T12:00:00+01:00",
+    "title": "Flash estimate GDP and employment - EU and euro area"
+  }
+]`

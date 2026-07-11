@@ -32,6 +32,7 @@ type Dependencies struct {
 	BEA           CalendarSourceDependencies
 	BLS           CalendarSourceDependencies
 	ECB           CalendarSourceDependencies
+	Eurostat      CalendarSourceDependencies
 	Fed           CalendarSourceDependencies
 	Stdout        io.Writer
 }
