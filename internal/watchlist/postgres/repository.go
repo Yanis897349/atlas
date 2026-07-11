@@ -14,6 +14,7 @@ import (
 type DB interface {
 	Begin(context.Context) (pgx.Tx, error)
 	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
 // Repository persists and retrieves watchlist definitions.
@@ -121,6 +122,19 @@ func (repository *Repository) UpdateWatchlist(
 	return stored, nil
 }
 
+// DeleteWatchlist atomically deletes a stored watchlist definition.
+func (repository *Repository) DeleteWatchlist(ctx context.Context, id string) error {
+	if err := validateWatchlistID(id); err != nil {
+		return err
+	}
+
+	var deletedID string
+	if err := repository.db.QueryRow(ctx, deleteWatchlistSQL, id).Scan(&deletedID); err != nil {
+		return fmt.Errorf("delete watchlist: %w", err)
+	}
+	return nil
+}
+
 func insertWatchlistInstruments(
 	ctx context.Context,
 	transaction pgx.Tx,
@@ -156,6 +170,11 @@ SET name = $2,
     updated_by = $3
 WHERE id = $1
 RETURNING id::text, created_at, updated_at, created_by, updated_by`
+
+const deleteWatchlistSQL = `
+DELETE FROM watchlists
+WHERE id = $1
+RETURNING id::text`
 
 const deleteWatchlistInstrumentsSQL = `
 DELETE FROM watchlist_instruments

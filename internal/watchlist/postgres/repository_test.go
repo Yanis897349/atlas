@@ -216,6 +216,39 @@ func TestRepositoryReturnsEmptyWatchlistListAndMissingID(t *testing.T) {
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("UpdateWatchlist() error = %v, want pgx.ErrNoRows", err)
 	}
+	if err := repository.DeleteWatchlist(
+		t.Context(), "00000000-0000-0000-0000-000000000001",
+	); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("DeleteWatchlist() error = %v, want pgx.ErrNoRows", err)
+	}
+}
+
+func TestRepositoryDeletesWatchlistAndCascadesInstruments(t *testing.T) {
+	database := openDatabase(t)
+	repository, _ := NewRepository(database.Pool)
+	created, err := repository.CreateWatchlist(t.Context(), watchlist.Definition{
+		Name: "Delete", Symbols: []string{"SPY", "EURUSD"},
+	}, "creator")
+	if err != nil {
+		t.Fatalf("CreateWatchlist() error = %v", err)
+	}
+
+	if err := repository.DeleteWatchlist(t.Context(), created.ID); err != nil {
+		t.Fatalf("DeleteWatchlist() error = %v", err)
+	}
+	if _, err := repository.Watchlist(t.Context(), created.ID); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("Watchlist() error = %v, want pgx.ErrNoRows", err)
+	}
+
+	var instruments int
+	if err := database.Pool.QueryRow(t.Context(), `
+SELECT count(*) FROM watchlist_instruments WHERE watchlist_id = $1
+`, created.ID).Scan(&instruments); err != nil {
+		t.Fatalf("count watchlist instruments: %v", err)
+	}
+	if instruments != 0 {
+		t.Errorf("instrument count = %d, want cascade deletion", instruments)
+	}
 }
 
 func TestRepositoryRollsBackAtomicCreation(t *testing.T) {
@@ -268,6 +301,42 @@ ADD CONSTRAINT chk_watchlist_instruments_test_update_rejection CHECK (symbol <> 
 	}, "editor")
 	if err == nil || !strings.Contains(err.Error(), "insert watchlist instrument 1") {
 		t.Fatalf("UpdateWatchlist() error = %v, want contextual instrument failure", err)
+	}
+
+	got, err := repository.Watchlist(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("Watchlist() after rollback error = %v", err)
+	}
+	if !reflect.DeepEqual(got, created) {
+		t.Errorf("Watchlist() after rollback = %#v, want %#v", got, created)
+	}
+}
+
+func TestRepositoryRollsBackAtomicDeletion(t *testing.T) {
+	database := openDatabase(t)
+	repository, _ := NewRepository(database.Pool)
+	created, err := repository.CreateWatchlist(t.Context(), watchlist.Definition{
+		Name: "Protected", Symbols: []string{"SPY", "EURUSD"},
+	}, "creator")
+	if err != nil {
+		t.Fatalf("CreateWatchlist() error = %v", err)
+	}
+	if _, err := database.Pool.Exec(t.Context(), `
+CREATE TABLE watchlist_delete_references (
+    watchlist_id uuid PRIMARY KEY REFERENCES watchlists (id)
+)
+`); err != nil {
+		t.Fatalf("create restricting reference: %v", err)
+	}
+	if _, err := database.Pool.Exec(
+		t.Context(), `INSERT INTO watchlist_delete_references (watchlist_id) VALUES ($1)`, created.ID,
+	); err != nil {
+		t.Fatalf("insert restricting reference: %v", err)
+	}
+
+	err = repository.DeleteWatchlist(t.Context(), created.ID)
+	if err == nil || !strings.Contains(err.Error(), "delete watchlist") {
+		t.Fatalf("DeleteWatchlist() error = %v, want contextual deletion failure", err)
 	}
 
 	got, err := repository.Watchlist(t.Context(), created.ID)
@@ -353,6 +422,9 @@ func TestRepositoryValidatesBeforePostgreSQL(t *testing.T) {
 		if _, err := repository.UpdateWatchlist(t.Context(), id, valid, "user"); err == nil {
 			t.Fatalf("UpdateWatchlist(%q) error = nil, want validation error", id)
 		}
+		if err := repository.DeleteWatchlist(t.Context(), id); err == nil {
+			t.Fatalf("DeleteWatchlist(%q) error = nil, want validation error", id)
+		}
 	}
 	for _, test := range definitions {
 		t.Run("update "+test.name, func(t *testing.T) {
@@ -389,6 +461,11 @@ func TestRepositoryPreservesCancellation(t *testing.T) {
 	}
 	if _, err := repository.Watchlists(ctx, 1); !errors.Is(err, context.Canceled) {
 		t.Errorf("Watchlists() error = %v, want context.Canceled", err)
+	}
+	if err := repository.DeleteWatchlist(
+		ctx, "00000000-0000-0000-0000-000000000001",
+	); !errors.Is(err, context.Canceled) {
+		t.Errorf("DeleteWatchlist() error = %v, want context.Canceled", err)
 	}
 }
 
@@ -427,5 +504,9 @@ func (panicDB) Begin(context.Context) (pgx.Tx, error) {
 }
 
 func (panicDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	panic("validation must happen before querying PostgreSQL")
+}
+
+func (panicDB) QueryRow(context.Context, string, ...any) pgx.Row {
 	panic("validation must happen before querying PostgreSQL")
 }

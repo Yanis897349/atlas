@@ -301,6 +301,11 @@ func (repository *watchlistRepositoryStub) UpdateWatchlist(
 	return stored, nil
 }
 
+func (repository *watchlistRepositoryStub) DeleteWatchlist(_ context.Context, id string) error {
+	repository.id = id
+	return repository.err
+}
+
 func (repository *watchlistRepositoryStub) Watchlist(_ context.Context, id string) (watchlist.StoredWatchlist, error) {
 	repository.lookupCalls++
 	repository.id = id
