@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +37,28 @@ func TestFetcherSendsBoundedCalendarRequest(t *testing.T) {
 	}
 	if !body.closed {
 		t.Error("response body was not closed")
+	}
+}
+
+func TestFetcherSendsEncodedQueryWithoutDiscardingConfiguredValues(t *testing.T) {
+	client := &recordingClient{response: &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}}
+	fetcher := newFetcher(t, Config{
+		Resource: "Example calendar",
+		URL:      "https://example.com/calendar?language=en&keywords=old",
+		Accept:   "application/json",
+		Client:   client,
+	})
+
+	_, err := fetcher.FetchWithQuery(t.Context(), url.Values{
+		"keywords": {"GDP and employment"},
+		"start":    {"2026-01-01T00:00:00+01:00"},
+	})
+	if err != nil {
+		t.Fatalf("FetchWithQuery() error = %v", err)
+	}
+	want := "https://example.com/calendar?keywords=GDP+and+employment&language=en&start=2026-01-01T00%3A00%3A00%2B01%3A00"
+	if client.url != want {
+		t.Errorf("request URL = %q, want %q", client.url, want)
 	}
 }
 

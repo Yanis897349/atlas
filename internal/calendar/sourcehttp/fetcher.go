@@ -82,10 +82,23 @@ func New(config Config) (*Fetcher, error) {
 
 // Fetch retrieves the configured document within its request and size bounds.
 func (fetcher *Fetcher) Fetch(ctx context.Context) ([]byte, error) {
+	return fetcher.fetch(ctx, nil)
+}
+
+// FetchWithQuery retrieves the configured document with the supplied query values.
+func (fetcher *Fetcher) FetchWithQuery(ctx context.Context, query url.Values) ([]byte, error) {
+	return fetcher.fetch(ctx, query)
+}
+
+func (fetcher *Fetcher) fetch(ctx context.Context, query url.Values) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetcher.requestBudget)
 	defer cancel()
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fetcher.url, nil)
+	requestURL, err := fetcher.requestURL(query)
+	if err != nil {
+		return nil, fmt.Errorf("create %s request URL: %w", fetcher.resource, err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create %s request: %w", fetcher.resource, err)
 	}
@@ -121,6 +134,25 @@ func (fetcher *Fetcher) Fetch(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("read %s: response exceeds %d bytes", fetcher.resource, maxResponseSize)
 	}
 	return body, nil
+}
+
+func (fetcher *Fetcher) requestURL(query url.Values) (string, error) {
+	if len(query) == 0 {
+		return fetcher.url, nil
+	}
+	parsed, err := url.Parse(fetcher.url)
+	if err != nil {
+		return "", err
+	}
+	merged := parsed.Query()
+	for key, values := range query {
+		merged.Del(key)
+		for _, value := range values {
+			merged.Add(key, value)
+		}
+	}
+	parsed.RawQuery = merged.Encode()
+	return parsed.String(), nil
 }
 
 func validateHTTPURL(rawURL string) (string, error) {

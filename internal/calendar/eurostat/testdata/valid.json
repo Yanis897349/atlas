@@ -1,0 +1,30 @@
+[
+  {
+    "recordid": "22486279",
+    "period": "Q4/2025",
+    "start": "2026-01-30T11:00:00Z",
+    "title": "Preliminary flash estimate GDP - EU and euro area"
+  },
+  {
+    "recordid": "ignored",
+    "title": "Inflation - euro area"
+  },
+  {
+    "recordid": "22486412",
+    "period": "Q4/2025",
+    "start": "2026-02-13T12:00:00+01:00",
+    "title": "Flash estimate GDP and employment - EU and euro area"
+  },
+  {
+    "recordid": "22486604",
+    "period": "Q4/2025",
+    "start": "2026-03-06T11:00:00Z",
+    "title": "GDP main aggregates and employment"
+  },
+  {
+    "recordid": "22486917",
+    "period": "Q4/2025",
+    "start": "2026-04-20T11:00:00.123Z",
+    "title": "GDP main aggregates and employment - update"
+  }
+]
