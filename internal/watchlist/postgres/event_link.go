@@ -52,12 +52,18 @@ func (repository *Repository) EventLinks(
 		return nil, err
 	}
 
+	transaction, err := repository.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin watchlist event link retrieval: %w", err)
+	}
+	defer func() { _ = transaction.Rollback(context.Background()) }()
+
 	var instrumentID string
-	if err := repository.db.QueryRow(ctx, resolveWatchlistInstrumentSQL, watchlistID, symbol).Scan(&instrumentID); err != nil {
+	if err := transaction.QueryRow(ctx, resolveWatchlistInstrumentSQL, watchlistID, symbol).Scan(&instrumentID); err != nil {
 		return nil, fmt.Errorf("resolve watchlist instrument: %w", err)
 	}
 
-	rows, err := repository.db.Query(ctx, eventLinksSQL, instrumentID, limit)
+	rows, err := transaction.Query(ctx, eventLinksSQL, instrumentID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query watchlist event links: %w", err)
 	}
@@ -73,6 +79,9 @@ func (repository *Repository) EventLinks(
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate watchlist event links: %w", err)
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit watchlist event link retrieval: %w", err)
 	}
 	return links, nil
 }
@@ -160,7 +169,8 @@ JOIN economic_events AS event ON event.id = link.economic_event_id`
 const resolveWatchlistInstrumentSQL = `
 SELECT id::text
 FROM watchlist_instruments
-WHERE watchlist_id = $1 AND symbol = $2`
+WHERE watchlist_id = $1 AND symbol = $2
+FOR KEY SHARE`
 
 const eventLinksSQL = `
 SELECT ` + eventLinkColumns + `
