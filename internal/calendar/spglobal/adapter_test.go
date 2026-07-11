@@ -172,6 +172,27 @@ func TestAdapterFetchEventsRejectsMalformedCalendarData(t *testing.T) {
 	}
 }
 
+func TestNewAdapterValidatesConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config spglobal.Config
+	}{
+		{name: "relative URL", config: spglobal.Config{CalendarURL: "/calendar.html"}},
+		{name: "unsupported URL scheme", config: spglobal.Config{CalendarURL: "file:///calendar.html"}},
+		{name: "negative request budget", config: spglobal.Config{RequestBudget: -time.Second}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := spglobal.NewAdapter(test.config); err == nil {
+				t.Fatal("NewAdapter() error = nil, want validation error")
+			}
+		})
+	}
+	if adapter, err := spglobal.NewAdapter(spglobal.Config{}); err != nil || adapter == nil {
+		t.Fatalf("NewAdapter(defaults) = %v, %v, want configured adapter", adapter, err)
+	}
+}
+
 const supportedTitle = "S&P Global Flash Eurozone PMI"
 
 func calendarHTML(year, date, releases string) string {
