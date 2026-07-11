@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
-	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,23 +18,13 @@ func runBLSIngestion(
 	stdout io.Writer,
 ) error {
 	adapter, err := bls.NewAdapter(bls.Config{
-		CalendarURL:   dependencies.BLSCalendarURL,
-		Client:        dependencies.BLSHTTPClient,
-		Now:           dependencies.BLSNow,
-		RequestBudget: dependencies.BLSRequestBudget,
+		CalendarURL:   dependencies.BLS.CalendarURL,
+		Client:        dependencies.BLS.HTTPClient,
+		Now:           dependencies.BLS.Now,
+		RequestBudget: dependencies.BLS.RequestBudget,
 	})
 	if err != nil {
 		return fmt.Errorf("configure BLS calendar: %w", err)
 	}
-	repository, err := calendarpostgres.NewRepository(pool)
-	if err != nil {
-		return fmt.Errorf("configure calendar repository: %w", err)
-	}
-
-	count, err := calendar.Ingest(ctx, adapter, repository, blsIngestionActor)
-	if err != nil {
-		return fmt.Errorf("ingest BLS calendar: %w", err)
-	}
-	_, _ = fmt.Fprintf(stdout, "ingested %d BLS calendar events\n", count)
-	return nil
+	return runCalendarIngestion(ctx, pool, adapter, blsIngestionActor, "BLS calendar", stdout)
 }

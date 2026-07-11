@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
-	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,23 +18,13 @@ func runFedIngestion(
 	stdout io.Writer,
 ) error {
 	adapter, err := fed.NewAdapter(fed.Config{
-		CalendarURL:   dependencies.FedCalendarURL,
-		Client:        dependencies.FedHTTPClient,
-		Now:           dependencies.FedNow,
-		RequestBudget: dependencies.FedRequestBudget,
+		CalendarURL:   dependencies.Fed.CalendarURL,
+		Client:        dependencies.Fed.HTTPClient,
+		Now:           dependencies.Fed.Now,
+		RequestBudget: dependencies.Fed.RequestBudget,
 	})
 	if err != nil {
 		return fmt.Errorf("configure Federal Reserve calendar: %w", err)
 	}
-	repository, err := calendarpostgres.NewRepository(pool)
-	if err != nil {
-		return fmt.Errorf("configure calendar repository: %w", err)
-	}
-
-	count, err := calendar.Ingest(ctx, adapter, repository, fedIngestionActor)
-	if err != nil {
-		return fmt.Errorf("ingest Federal Reserve calendar: %w", err)
-	}
-	_, _ = fmt.Fprintf(stdout, "ingested %d Federal Reserve calendar events\n", count)
-	return nil
+	return runCalendarIngestion(ctx, pool, adapter, fedIngestionActor, "Federal Reserve calendar", stdout)
 }

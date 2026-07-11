@@ -2,13 +2,10 @@ package bls_test
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -129,73 +126,6 @@ func TestAdapterFetchEventsRejectsMalformedInput(t *testing.T) {
 	}
 }
 
-func TestAdapterFetchEventsClosesResponseBody(t *testing.T) {
-	for _, status := range []int{http.StatusOK, http.StatusServiceUnavailable} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
-			body := &trackingBody{Reader: bytes.NewReader(fixtureContents(t, "valid.ics"))}
-			adapter := newAdapter(t, responseClient{status: status, body: body}, nil, 0)
-
-			_, _ = adapter.FetchEvents(t.Context())
-			if !body.closed {
-				t.Error("response body was not closed")
-			}
-		})
-	}
-}
-
-func TestAdapterFetchEventsReportsHTTPFailures(t *testing.T) {
-	transportErr := errors.New("connection reset")
-	tests := []struct {
-		name   string
-		client bls.HTTPClient
-		want   string
-	}{
-		{name: "transport", client: errorClient{err: transportErr}, want: "fetch BLS calendar"},
-		{name: "status", client: responseClient{status: http.StatusServiceUnavailable}, want: "unexpected HTTP status 503"},
-		{name: "read", client: responseClient{body: failingReader{}}, want: "read BLS calendar"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			adapter := newAdapter(t, test.client, nil, 0)
-			_, err := adapter.FetchEvents(t.Context())
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("FetchEvents() error = %v, want error containing %q", err, test.want)
-			}
-		})
-	}
-}
-
-func TestAdapterFetchEventsRejectsOversizedResponse(t *testing.T) {
-	const maxCalendarSize = 10 << 20
-	adapter := newAdapter(t, responseClient{body: bytes.NewReader(make([]byte, maxCalendarSize+1))}, nil, 0)
-
-	_, err := adapter.FetchEvents(t.Context())
-	if err == nil || !strings.Contains(err.Error(), "response exceeds") {
-		t.Fatalf("FetchEvents() error = %v, want response-size error", err)
-	}
-}
-
-func TestAdapterFetchEventsPropagatesCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	adapter := newAdapter(t, contextClient{}, nil, 0)
-
-	_, err := adapter.FetchEvents(ctx)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("FetchEvents() error = %v, want context cancellation", err)
-	}
-}
-
-func TestAdapterFetchEventsHonorsRequestBudget(t *testing.T) {
-	adapter := newAdapter(t, contextClient{}, nil, time.Nanosecond)
-
-	_, err := adapter.FetchEvents(t.Context())
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("FetchEvents() error = %v, want request-budget deadline", err)
-	}
-}
-
 func TestNewAdapterValidatesConfig(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -265,56 +195,4 @@ func fixtureContents(t *testing.T, name string) []byte {
 		t.Fatalf("read fixture %q: %v", name, err)
 	}
 	return contents
-}
-
-type errorClient struct {
-	err error
-}
-
-func (client errorClient) Do(*http.Request) (*http.Response, error) {
-	return nil, client.err
-}
-
-type responseClient struct {
-	status int
-	body   io.Reader
-}
-
-func (client responseClient) Do(*http.Request) (*http.Response, error) {
-	status := client.status
-	if status == 0 {
-		status = http.StatusOK
-	}
-	body := client.body
-	if body == nil {
-		body = http.NoBody
-	}
-	responseBody, ok := body.(io.ReadCloser)
-	if !ok {
-		responseBody = io.NopCloser(body)
-	}
-	return &http.Response{StatusCode: status, Body: responseBody}, nil
-}
-
-type contextClient struct{}
-
-func (contextClient) Do(request *http.Request) (*http.Response, error) {
-	<-request.Context().Done()
-	return nil, request.Context().Err()
-}
-
-type failingReader struct{}
-
-func (failingReader) Read([]byte) (int, error) {
-	return 0, errors.New("unexpected EOF")
-}
-
-type trackingBody struct {
-	io.Reader
-	closed bool
-}
-
-func (body *trackingBody) Close() error {
-	body.closed = true
-	return nil
 }

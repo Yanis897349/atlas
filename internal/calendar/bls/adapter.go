@@ -6,12 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/calendar/sourcehttp"
 	ics "github.com/arran4/golang-ical"
 )
 
@@ -21,13 +20,11 @@ const (
 	// CalendarURL is the canonical Bureau of Labor Statistics release calendar feed.
 	CalendarURL = "https://www.bls.gov/schedule/news_release/bls.ics"
 
-	defaultRequestBudget = 30 * time.Second
+	resource = "BLS calendar"
 )
 
 // HTTPClient is the subset of http.Client used to retrieve the calendar.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
+type HTTPClient = sourcehttp.Client
 
 // Config controls calendar retrieval and provides deterministic test seams.
 type Config struct {
@@ -39,10 +36,8 @@ type Config struct {
 
 // Adapter retrieves and normalizes the BLS release calendar.
 type Adapter struct {
-	calendarURL   string
-	client        HTTPClient
-	now           func() time.Time
-	requestBudget time.Duration
+	fetcher *sourcehttp.Fetcher
+	now     func() time.Time
 }
 
 // NewAdapter validates config and returns a BLS calendar adapter.
@@ -51,38 +46,34 @@ func NewAdapter(config Config) (*Adapter, error) {
 	if calendarURL == "" {
 		calendarURL = CalendarURL
 	}
-	validatedURL, err := validateHTTPURL(calendarURL)
+	fetcher, err := sourcehttp.New(sourcehttp.Config{
+		Resource:      resource,
+		URL:           calendarURL,
+		Accept:        "text/calendar",
+		Client:        config.Client,
+		RequestBudget: config.RequestBudget,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("invalid BLS calendar URL: %w", err)
+		if errors.Is(err, sourcehttp.ErrNegativeRequestBudget) {
+			return nil, errors.New("BLS request budget must not be negative")
+		}
+		return nil, err
 	}
 
-	client := config.Client
-	if client == nil {
-		client = &http.Client{Timeout: defaultRequestBudget}
-	}
 	now := config.Now
 	if now == nil {
 		now = time.Now
 	}
-	if config.RequestBudget < 0 {
-		return nil, errors.New("BLS request budget must not be negative")
-	}
-	requestBudget := config.RequestBudget
-	if requestBudget == 0 {
-		requestBudget = defaultRequestBudget
-	}
 
 	return &Adapter{
-		calendarURL:   validatedURL,
-		client:        client,
-		now:           now,
-		requestBudget: requestBudget,
+		fetcher: fetcher,
+		now:     now,
 	}, nil
 }
 
 // FetchEvents retrieves the configured feed and returns supported unique releases.
 func (adapter *Adapter) FetchEvents(ctx context.Context) ([]calendar.Event, error) {
-	body, err := adapter.fetchBody(ctx)
+	body, err := adapter.fetcher.Fetch(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -157,16 +148,4 @@ func supportedEventType(summary string) (calendar.EventType, bool) {
 	default:
 		return "", false
 	}
-}
-
-func validateHTTPURL(rawURL string) (string, error) {
-	trimmed := strings.TrimSpace(rawURL)
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return "", err
-	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
-		return "", errors.New("must be an absolute HTTP(S) URL")
-	}
-	return parsed.String(), nil
 }

@@ -9,28 +9,29 @@ import (
 	"os"
 	"time"
 
-	"github.com/Yanis897349/atlas/internal/calendar/bls"
-	"github.com/Yanis897349/atlas/internal/calendar/fed"
+	"github.com/Yanis897349/atlas/internal/calendar/sourcehttp"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CalendarSourceDependencies contains deterministic seams for one calendar source.
+type CalendarSourceDependencies struct {
+	HTTPClient    sourcehttp.Client
+	CalendarURL   string
+	Now           func() time.Time
+	RequestBudget time.Duration
+}
+
 // Dependencies contains process-bound dependencies and deterministic test seams.
 type Dependencies struct {
-	Getenv           func(string) string
-	RSSHTTPClient    rss.HTTPClient
-	RSSFeedURL       string
-	RSSWait          func(context.Context, time.Duration) error
-	BLSHTTPClient    bls.HTTPClient
-	BLSCalendarURL   string
-	BLSNow           func() time.Time
-	BLSRequestBudget time.Duration
-	FedHTTPClient    fed.HTTPClient
-	FedCalendarURL   string
-	FedNow           func() time.Time
-	FedRequestBudget time.Duration
-	Stdout           io.Writer
+	Getenv        func(string) string
+	RSSHTTPClient rss.HTTPClient
+	RSSFeedURL    string
+	RSSWait       func(context.Context, time.Duration) error
+	BLS           CalendarSourceDependencies
+	Fed           CalendarSourceDependencies
+	Stdout        io.Writer
 }
 
 // Run executes one Atlas command.

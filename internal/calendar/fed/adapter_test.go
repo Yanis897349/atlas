@@ -2,7 +2,6 @@ package fed_test
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -234,44 +233,4 @@ func fixtureContents(t *testing.T, name string) []byte {
 		t.Fatalf("read fixture %q: %v", name, err)
 	}
 	return contents
-}
-
-type errorClient struct {
-	response *http.Response
-	err      error
-}
-
-func (client errorClient) Do(*http.Request) (*http.Response, error) {
-	return client.response, client.err
-}
-
-type responseClient struct {
-	response *http.Response
-}
-
-func (client responseClient) Do(*http.Request) (*http.Response, error) {
-	return client.response, nil
-}
-
-type contextClient struct{}
-
-func (contextClient) Do(request *http.Request) (*http.Response, error) {
-	<-request.Context().Done()
-	return nil, request.Context().Err()
-}
-
-type failingReader struct{}
-
-func (failingReader) Read([]byte) (int, error) {
-	return 0, errors.New("unexpected EOF")
-}
-
-type trackingBody struct {
-	io.Reader
-	closed bool
-}
-
-func (body *trackingBody) Close() error {
-	body.closed = true
-	return nil
 }
