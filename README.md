@@ -180,6 +180,7 @@ mise exec -- go run ./cmd/atlas ingest-bls
 mise exec -- go run ./cmd/atlas ingest-fed
 mise exec -- go run ./cmd/atlas ingest-ecb
 mise exec -- go run ./cmd/atlas ingest-bea
+mise exec -- go run ./cmd/atlas ingest-census
 mise exec -- go run ./cmd/atlas ingest-eurostat
 mise exec -- go run ./cmd/atlas upcoming-events \
   --region united_states \
@@ -188,6 +189,6 @@ mise exec -- go run ./cmd/atlas upcoming-events \
   --limit 25
 ```
 
-`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, and `ingest-eurostat` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, national GDP estimates from the official BEA release schedule, and current-year Euro-area quarterly GDP releases from the official Eurostat calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
+`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, `ingest-census`, and `ingest-eurostat` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, national GDP estimates from the official BEA release schedule, retail-sales releases from the official Census calendar, and current-year Euro-area quarterly GDP releases from the official Eurostat calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
 
 `upcoming-events` reads one supported region (`united_states` or `eurozone`) over an inclusive RFC 3339 time window. Its limit must be from 1 through 100. The command emits a JSON array ordered by scheduled time and event ID, retaining each event's source identity and citation URL; it does not ingest or modify records.

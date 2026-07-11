@@ -12,7 +12,7 @@ import (
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-eurostat|upcoming-events>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|upcoming-events>"
 
 type command struct {
 	name                     string

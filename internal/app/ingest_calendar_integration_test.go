@@ -12,6 +12,7 @@ import (
 
 	"github.com/Yanis897349/atlas/internal/calendar/bea"
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
+	"github.com/Yanis897349/atlas/internal/calendar/census"
 	"github.com/Yanis897349/atlas/internal/calendar/ecb"
 	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
@@ -225,6 +226,29 @@ func calendarCommandTests() []calendarCommandTest {
 			},
 		},
 		{
+			name:                 "Census",
+			command:              "ingest-census",
+			source:               census.Source,
+			actor:                censusIngestionActor,
+			canonicalURL:         census.CalendarURL,
+			contentType:          "text/html",
+			body:                 testCensusCalendar,
+			correctedBody:        strings.Replace(testCensusCalendar, "January 14, 2026", "January 15, 2026", 1),
+			correctedScheduledAt: time.Date(2026, time.January, 15, 13, 30, 0, 0, time.UTC),
+			eventCount:           2,
+			output:               "ingested 2 Census calendar events\n",
+			configurationError:   "configure Census calendar: invalid Census calendar URL",
+			retrievalError:       "ingest Census calendar: fetch economic events: fetch Census calendar",
+			persistenceError:     "ingest Census calendar: persist economic event 1: upsert economic event",
+			ingestionError:       "ingest Census calendar",
+			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
+				dependencies.Census = calendarSourceDependencies(server, now)
+			},
+			setURL: func(dependencies *Dependencies, url string) {
+				dependencies.Census.CalendarURL = url
+			},
+		},
+		{
 			name:               "Federal Reserve",
 			command:            "ingest-fed",
 			source:             fed.Source,
@@ -341,6 +365,21 @@ const testBEACalendar = `<!doctype html>
         <td class="release-title">GDP (Second Estimate), 4th Quarter and Year 2025</td>
       </tr>
     </tbody>
+  </table>
+</body></html>`
+
+const testCensusCalendar = `<!doctype html>
+<html lang="en"><body>
+  <table id="calendar">
+    <tr><th>Indicator</th><th>Release Date</th><th>Time</th><th>Period Covered</th></tr>
+    <tr>
+      <td>Advance Monthly Sales for Retail and Food Services</td>
+      <td>January 14, 2026</td><td>8:30 AM</td><td>November 2025</td>
+    </tr>
+    <tr>
+      <td>Advance Monthly Sales for Retail and Food Services</td>
+      <td>June 17, 2026</td><td>8:30 AM</td><td>May 2026</td>
+    </tr>
   </table>
 </body></html>`
 

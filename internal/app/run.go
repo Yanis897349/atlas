@@ -31,6 +31,7 @@ type Dependencies struct {
 	RSSWait       func(context.Context, time.Duration) error
 	BEA           CalendarSourceDependencies
 	BLS           CalendarSourceDependencies
+	Census        CalendarSourceDependencies
 	ECB           CalendarSourceDependencies
 	Eurostat      CalendarSourceDependencies
 	Fed           CalendarSourceDependencies

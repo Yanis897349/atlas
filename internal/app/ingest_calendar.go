@@ -8,6 +8,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/calendar/bea"
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
+	"github.com/Yanis897349/atlas/internal/calendar/census"
 	"github.com/Yanis897349/atlas/internal/calendar/ecb"
 	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
@@ -18,6 +19,7 @@ import (
 const (
 	beaIngestionActor      = "atlas-bea-calendar-ingestion"
 	blsIngestionActor      = "atlas-bls-calendar-ingestion"
+	censusIngestionActor   = "atlas-census-calendar-ingestion"
 	ecbIngestionActor      = "atlas-ecb-calendar-ingestion"
 	eurostatIngestionActor = "atlas-eurostat-calendar-ingestion"
 	fedIngestionActor      = "atlas-fed-calendar-ingestion"
@@ -80,6 +82,19 @@ var calendarIngestionCommands = []calendarIngestionCommand{
 				Client:        dependencies.BEA.HTTPClient,
 				Now:           dependencies.BEA.Now,
 				RequestBudget: dependencies.BEA.RequestBudget,
+			})
+		},
+	},
+	{
+		name:         "ingest-census",
+		calendarName: "Census calendar",
+		actor:        censusIngestionActor,
+		newAdapter: func(dependencies Dependencies) (calendar.Adapter, error) {
+			return census.NewAdapter(census.Config{
+				CalendarURL:   dependencies.Census.CalendarURL,
+				Client:        dependencies.Census.HTTPClient,
+				Now:           dependencies.Census.Now,
+				RequestBudget: dependencies.Census.RequestBudget,
 			})
 		},
 	},
