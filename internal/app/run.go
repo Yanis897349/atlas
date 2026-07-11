@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
+	"github.com/Yanis897349/atlas/internal/calendar/fed"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,16 +26,20 @@ type Dependencies struct {
 	BLSCalendarURL   string
 	BLSNow           func() time.Time
 	BLSRequestBudget time.Duration
+	FedHTTPClient    fed.HTTPClient
+	FedCalendarURL   string
+	FedNow           func() time.Time
+	FedRequestBudget time.Duration
 	Stdout           io.Writer
 }
 
 // Run executes one Atlas command.
 func Run(ctx context.Context, arguments []string, dependencies Dependencies) error {
 	if len(arguments) != 1 {
-		return errors.New("usage: atlas <migrate|ingest-rss|ingest-bls>")
+		return errors.New("usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed>")
 	}
-	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" && arguments[0] != "ingest-bls" {
-		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss|ingest-bls>", arguments[0])
+	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" && arguments[0] != "ingest-bls" && arguments[0] != "ingest-fed" {
+		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed>", arguments[0])
 	}
 
 	getenv := dependencies.Getenv
@@ -70,6 +75,8 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return runRSSIngestion(ctx, pool, dependencies, stdout)
 	case "ingest-bls":
 		return runBLSIngestion(ctx, pool, dependencies, stdout)
+	case "ingest-fed":
+		return runFedIngestion(ctx, pool, dependencies, stdout)
 	default:
 		panic("validated command is not handled")
 	}
