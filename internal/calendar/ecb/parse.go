@@ -10,6 +10,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/calendar/sourcehtml"
 	"golang.org/x/net/html"
 )
 
@@ -27,11 +28,11 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 		return nil, err
 	}
 
-	schedule := firstNodeWithClass(document, "definition-list")
+	schedule := sourcehtml.FirstNodeWithClass(document, "definition-list")
 	if schedule == nil {
 		return nil, errors.New("meeting schedule is required")
 	}
-	list := firstElement(schedule, "dl")
+	list := sourcehtml.FirstElement(schedule, "dl")
 	if list == nil {
 		return nil, errors.New("meeting schedule list is required")
 	}
@@ -54,13 +55,13 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 			if pendingDate != "" {
 				return nil, errors.New("meeting date is missing a description")
 			}
-			pendingDate = normalizedText(node)
+			pendingDate = sourcehtml.NormalizedText(node)
 		case "dd":
 			if pendingDate == "" {
 				return nil, errors.New("meeting description is missing a date")
 			}
 			rows++
-			description := normalizedText(node)
+			description := sourcehtml.NormalizedText(node)
 			if supportedDescription(description) {
 				event, err := normalizeDecision(pendingDate, berlin, retrievedAt)
 				if err != nil {

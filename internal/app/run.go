@@ -65,6 +65,15 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 	if stdout == nil {
 		stdout = io.Discard
 	}
+	if parsedCommand.calendarIngestionCommand != nil {
+		return runCalendarIngestion(
+			ctx,
+			pool,
+			parsedCommand.calendarIngestionCommand,
+			dependencies,
+			stdout,
+		)
+	}
 	switch parsedCommand.name {
 	case "migrate":
 		if err := databasepostgres.Migrate(ctx, pool); err != nil {
@@ -74,14 +83,6 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return nil
 	case "ingest-rss":
 		return runRSSIngestion(ctx, pool, dependencies, stdout)
-	case "ingest-bls":
-		return runBLSIngestion(ctx, pool, dependencies, stdout)
-	case "ingest-fed":
-		return runFedIngestion(ctx, pool, dependencies, stdout)
-	case "ingest-ecb":
-		return runECBIngestion(ctx, pool, dependencies, stdout)
-	case "ingest-bea":
-		return runBEAIngestion(ctx, pool, dependencies, stdout)
 	case "upcoming-events":
 		repository, err := calendarpostgres.NewRepository(pool)
 		if err != nil {

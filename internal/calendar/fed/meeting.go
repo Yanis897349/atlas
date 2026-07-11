@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/calendar/sourcehtml"
 	"golang.org/x/net/html"
 )
 
@@ -38,20 +39,20 @@ func normalizeMeeting(
 	eastern *time.Location,
 	retrievedAt time.Time,
 ) (calendar.Event, bool, error) {
-	dateNode := firstNodeWithClass(row, "fomc-meeting__date")
+	dateNode := sourcehtml.FirstNodeWithClass(row, "fomc-meeting__date")
 	if dateNode == nil {
 		return calendar.Event{}, false, errors.New("meeting date is required")
 	}
-	dateText := normalizedText(dateNode)
+	dateText := sourcehtml.NormalizedText(dateNode)
 	if strings.Contains(strings.ToLower(dateText), "notation vote") {
 		return calendar.Event{}, false, nil
 	}
 
-	monthNode := firstNodeWithClass(row, "fomc-meeting__month")
+	monthNode := sourcehtml.FirstNodeWithClass(row, "fomc-meeting__month")
 	if monthNode == nil {
 		return calendar.Event{}, false, errors.New("meeting month is required")
 	}
-	startMonth, endMonth, err := parseMonths(normalizedText(monthNode))
+	startMonth, endMonth, err := parseMonths(sourcehtml.NormalizedText(monthNode))
 	if err != nil {
 		return calendar.Event{}, false, err
 	}

@@ -11,6 +11,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/calendar/sourcehtml"
 	"golang.org/x/net/html"
 )
 
@@ -27,16 +28,16 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 		return nil, fmt.Errorf("load decision time zone: %w", err)
 	}
 
-	panels := nodesWithClass(document, "panel")
+	panels := sourcehtml.NodesWithClass(document, "panel")
 	events := make([]calendar.Event, 0)
 	seen := make(map[string]struct{})
 	calendarPanels := 0
 	for _, panel := range panels {
-		headingNode := firstNodeWithClass(panel, "panel-heading")
+		headingNode := sourcehtml.FirstNodeWithClass(panel, "panel-heading")
 		if headingNode == nil {
 			continue
 		}
-		heading := normalizedText(headingNode)
+		heading := sourcehtml.NormalizedText(headingNode)
 		if !strings.HasSuffix(heading, "FOMC Meetings") {
 			continue
 		}
@@ -51,7 +52,7 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 		}
 
 		calendarPanels++
-		rows := nodesWithClass(panel, "fomc-meeting")
+		rows := sourcehtml.NodesWithClass(panel, "fomc-meeting")
 		if len(rows) == 0 {
 			return nil, fmt.Errorf("FOMC year %d has no meeting rows", year)
 		}

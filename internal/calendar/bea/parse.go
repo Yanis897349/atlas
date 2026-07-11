@@ -11,6 +11,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/calendar/sourcehtml"
 	"golang.org/x/net/html"
 )
 
@@ -33,7 +34,7 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 		return nil, err
 	}
 
-	table := firstElementWithID(document, "release-schedule-table")
+	table := sourcehtml.FirstElementWithID(document, "release-schedule-table")
 	if table == nil {
 		return nil, errors.New("release schedule table is required")
 	}
@@ -41,11 +42,11 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	tbody := firstElement(table, "tbody")
+	tbody := sourcehtml.FirstElement(table, "tbody")
 	if tbody == nil {
 		return nil, errors.New("release schedule body is required")
 	}
-	rows := childElements(tbody, "tr")
+	rows := sourcehtml.ChildElements(tbody, "tr")
 	if len(rows) == 0 {
 		return nil, errors.New("release schedule rows are required")
 	}
@@ -58,11 +59,11 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 	events := make([]calendar.Event, 0)
 	seen := make(map[string]struct{})
 	for index, row := range rows {
-		titleNode := firstNodeWithClass(row, "release-title")
+		titleNode := sourcehtml.FirstNodeWithClass(row, "release-title")
 		if titleNode == nil {
 			return nil, fmt.Errorf("release %d title is required", index+1)
 		}
-		title := normalizedText(titleNode)
+		title := sourcehtml.NormalizedText(titleNode)
 		identity, supported, err := supportedGDPRelease(title)
 		if err != nil {
 			return nil, fmt.Errorf("normalize BEA release %d: %w", index+1, err)
@@ -85,15 +86,15 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 }
 
 func releaseYear(table *html.Node) (int, error) {
-	thead := firstElement(table, "thead")
+	thead := sourcehtml.FirstElement(table, "thead")
 	if thead == nil {
 		return 0, errors.New("release schedule heading is required")
 	}
-	heading := firstElement(thead, "th")
+	heading := sourcehtml.FirstElement(thead, "th")
 	if heading == nil {
 		return 0, errors.New("release schedule year heading is required")
 	}
-	value := normalizedText(heading)
+	value := sourcehtml.NormalizedText(heading)
 	matches := yearHeadingPattern.FindStringSubmatch(value)
 	if matches == nil {
 		return 0, fmt.Errorf("invalid release schedule year heading %q", value)
@@ -136,17 +137,17 @@ func normalizeRelease(
 	eastern *time.Location,
 	retrievedAt time.Time,
 ) (calendar.Event, error) {
-	dateNode := firstNodeWithClass(row, "release-date")
+	dateNode := sourcehtml.FirstNodeWithClass(row, "release-date")
 	if dateNode == nil {
 		return calendar.Event{}, errors.New("release date is required")
 	}
-	dateText := normalizedText(dateNode)
+	dateText := sourcehtml.NormalizedText(dateNode)
 
-	timeNode := firstElement(firstNodeWithClass(row, "scheduled-date"), "small")
+	timeNode := sourcehtml.FirstElement(sourcehtml.FirstNodeWithClass(row, "scheduled-date"), "small")
 	if timeNode == nil {
 		return calendar.Event{}, errors.New("release time is required")
 	}
-	timeText := normalizedText(timeNode)
+	timeText := sourcehtml.NormalizedText(timeNode)
 	scheduledAt, err := time.ParseInLocation("January 2 2006 3:04 PM", fmt.Sprintf("%s %d %s", dateText, releaseYear, timeText), eastern)
 	if err != nil {
 		return calendar.Event{}, fmt.Errorf("invalid release date and time %q: %w", dateText+" "+timeText, err)

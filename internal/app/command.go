@@ -15,8 +15,9 @@ import (
 const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|upcoming-events>"
 
 type command struct {
-	name                string
-	upcomingEventsQuery upcomingEventsQuery
+	name                     string
+	calendarIngestionCommand *calendarIngestionCommand
+	upcomingEventsQuery      upcomingEventsQuery
 }
 
 func parseCommand(arguments []string) (command, error) {
@@ -25,7 +26,7 @@ func parseCommand(arguments []string) (command, error) {
 	}
 
 	switch arguments[0] {
-	case "migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb", "ingest-bea":
+	case "migrate", "ingest-rss":
 		if len(arguments) != 1 {
 			return command{}, errors.New(commandUsage)
 		}
@@ -36,9 +37,16 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], upcomingEventsQuery: query}, nil
-	default:
+	}
+
+	calendarCommand := findCalendarIngestionCommand(arguments[0])
+	if calendarCommand == nil {
 		return command{}, fmt.Errorf("unknown command %q; %s", arguments[0], commandUsage)
 	}
+	if len(arguments) != 1 {
+		return command{}, errors.New(commandUsage)
+	}
+	return command{name: arguments[0], calendarIngestionCommand: calendarCommand}, nil
 }
 
 func parseUpcomingEventsQuery(arguments []string) (upcomingEventsQuery, error) {
