@@ -44,12 +44,16 @@ func TestRunCreatesAndListsWatchlistsEndToEnd(t *testing.T) {
 		t.Fatalf("first created output = %#v, want normalized definition and audit", first)
 	}
 
-	firstTime := time.Date(2026, time.July, 12, 8, 0, 0, 0, time.UTC)
+	var databaseNow time.Time
+	if err := database.Pool.QueryRow(t.Context(), `SELECT statement_timestamp()`).Scan(&databaseNow); err != nil {
+		t.Fatalf("query database time: %v", err)
+	}
+	firstTime := databaseNow.UTC().Add(-2 * time.Hour).Truncate(time.Second)
 	secondTime := firstTime.Add(time.Hour)
 	if _, err := database.Pool.Exec(t.Context(), `
 UPDATE watchlists
-SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
-    updated_at = CASE WHEN id = $1 THEN $2 ELSE $3 END
+SET created_at = CASE WHEN id = $1 THEN $2::timestamptz ELSE $3::timestamptz END,
+    updated_at = CASE WHEN id = $1 THEN $2::timestamptz ELSE $3::timestamptz END
 `, first.ID, firstTime, secondTime); err != nil {
 		t.Fatalf("set deterministic watchlist times: %v", err)
 	}
@@ -76,7 +80,7 @@ SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
 	}
 	if updated.ID != first.ID || updated.Name != "Updated first" ||
 		!reflect.DeepEqual(updated.Symbols, []string{"DXY", "BRK.B"}) || updated.CreatedBy != "first-user" ||
-		updated.UpdatedBy != "editor" || updated.CreatedAt != "2026-07-12T08:00:00Z" ||
+		updated.UpdatedBy != "editor" || updated.CreatedAt != formatWatchlistOutputTime(firstTime) ||
 		!updatedAt.After(firstTime) {
 		t.Errorf("updated output = %#v, want replaced definition with preserved creation metadata", updated)
 	}
@@ -91,7 +95,7 @@ SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
 	}
 	if len(output) != 1 || output[0].ID != second.ID || output[0].Name != "Second" ||
 		!reflect.DeepEqual(output[0].Symbols, []string{"BRK.B"}) || output[0].CreatedBy != "second-user" ||
-		output[0].CreatedAt != "2026-07-12T09:00:00Z" {
+		output[0].CreatedAt != formatWatchlistOutputTime(secondTime) {
 		t.Errorf("listed output = %#v, want newest complete watchlist", output)
 	}
 

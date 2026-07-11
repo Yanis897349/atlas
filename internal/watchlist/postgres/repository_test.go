@@ -178,8 +178,8 @@ func TestRepositoryWatchlistsOrdersAndLimits(t *testing.T) {
 	newestTime := tieTime.Add(time.Hour)
 	if _, err := database.Pool.Exec(t.Context(), `
 UPDATE watchlists
-SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
-    updated_at = CASE WHEN id = $1 THEN $2 ELSE $3 END
+SET created_at = CASE WHEN id = $1 THEN $2::timestamptz ELSE $3::timestamptz END,
+    updated_at = CASE WHEN id = $1 THEN $2::timestamptz ELSE $3::timestamptz END
 `, stored[2].ID, newestTime, tieTime); err != nil {
 		t.Fatalf("set deterministic creation times: %v", err)
 	}
