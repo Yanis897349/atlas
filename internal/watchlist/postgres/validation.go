@@ -28,7 +28,7 @@ func normalizeAndValidateDefinition(
 	symbols := make([]string, len(definition.Symbols))
 	seen := make(map[string]struct{}, len(definition.Symbols))
 	for index, symbol := range definition.Symbols {
-		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		symbol = normalizeInstrumentSymbol(symbol)
 		if symbol == "" {
 			return watchlist.Definition{}, "", fmt.Errorf("instrument symbol %d is required", index)
 		}
@@ -55,4 +55,54 @@ func validateWatchlistsLimit(limit int) error {
 		return fmt.Errorf("limit must be between 1 and %d", watchlist.MaxWatchlistsLimit)
 	}
 	return nil
+}
+
+func normalizeAndValidateEventLink(
+	watchlistID string,
+	symbol string,
+	eventID string,
+	actor string,
+) (string, string, error) {
+	if err := validateWatchlistID(watchlistID); err != nil {
+		return "", "", err
+	}
+	if err := validateEventID(eventID); err != nil {
+		return "", "", err
+	}
+
+	symbol = normalizeInstrumentSymbol(symbol)
+	actor = strings.TrimSpace(actor)
+	if symbol == "" {
+		return "", "", errors.New("instrument symbol is required")
+	}
+	if actor == "" {
+		return "", "", errors.New("actor is required")
+	}
+	return symbol, actor, nil
+}
+
+func normalizeAndValidateEventLinksQuery(watchlistID string, symbol string, limit int) (string, error) {
+	if err := validateWatchlistID(watchlistID); err != nil {
+		return "", err
+	}
+	symbol = normalizeInstrumentSymbol(symbol)
+	if symbol == "" {
+		return "", errors.New("instrument symbol is required")
+	}
+	if limit < 1 || limit > watchlist.MaxEventLinksLimit {
+		return "", fmt.Errorf("limit must be between 1 and %d", watchlist.MaxEventLinksLimit)
+	}
+	return symbol, nil
+}
+
+func validateEventID(id string) error {
+	var value pgtype.UUID
+	if value.Scan(id) != nil || !value.Valid {
+		return errors.New("event ID must be a UUID")
+	}
+	return nil
+}
+
+func normalizeInstrumentSymbol(symbol string) string {
+	return strings.ToUpper(strings.TrimSpace(symbol))
 }

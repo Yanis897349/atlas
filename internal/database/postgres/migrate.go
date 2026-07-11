@@ -24,6 +24,9 @@ var dailyBriefsMigration string
 //go:embed migrations/000005_create_watchlists.up.sql
 var watchlistsMigration string
 
+//go:embed migrations/000006_create_watchlist_event_links.up.sql
+var watchlistEventLinksMigration string
+
 var migrations = []struct {
 	version int64
 	query   string
@@ -33,6 +36,7 @@ var migrations = []struct {
 	{version: 3, query: sourceRecordsPublishedAtIndexMigration},
 	{version: 4, query: dailyBriefsMigration},
 	{version: 5, query: watchlistsMigration},
+	{version: 6, query: watchlistEventLinksMigration},
 }
 
 // Migrate applies pending database migrations transactionally.
