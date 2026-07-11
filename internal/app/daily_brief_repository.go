@@ -106,23 +106,12 @@ func (repository *dailyBriefRepository) PersistDailyBrief(
 		}
 
 		for citationPosition, citation := range section.citations {
-			var sourceRecordID, economicEventID any
-			switch citation.kind {
-			case dailyBriefCitationSourceRecord:
-				sourceRecordID = citation.id
-			case dailyBriefCitationUpcomingEvent:
-				economicEventID = citation.id
-			}
-			if _, err := transaction.Exec(
+			if err := insertDailyBriefCitation(
 				ctx,
-				insertDailyBriefCitationSQL,
+				transaction,
 				sectionID,
 				citationPosition,
-				citation.kind,
-				sourceRecordID,
-				economicEventID,
-				citation.source,
-				citation.url,
+				citation,
 				actor,
 			); err != nil {
 				return storedDailyBrief{}, fmt.Errorf(
@@ -139,6 +128,35 @@ func (repository *dailyBriefRepository) PersistDailyBrief(
 		return storedDailyBrief{}, fmt.Errorf("commit daily brief persistence: %w", err)
 	}
 	return stored, nil
+}
+
+func insertDailyBriefCitation(
+	ctx context.Context,
+	transaction pgx.Tx,
+	sectionID string,
+	position int,
+	citation dailyBriefCitation,
+	actor string,
+) error {
+	query := insertDailyBriefSourceRecordCitationSQL
+	if citation.kind == dailyBriefCitationUpcomingEvent {
+		query = insertDailyBriefUpcomingEventCitationSQL
+	}
+
+	var citationID string
+	if err := transaction.QueryRow(
+		ctx,
+		query,
+		sectionID,
+		position,
+		citation.id,
+		citation.source,
+		citation.url,
+		actor,
+	).Scan(&citationID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func validateDailyBriefPersistence(brief dailyBrief, actor string) error {
@@ -267,7 +285,7 @@ INSERT INTO daily_brief_sections (
 VALUES ($1, $2, $3, $4, $5, $5)
 RETURNING id::text`
 
-const insertDailyBriefCitationSQL = `
+const insertDailyBriefSourceRecordCitationSQL = `
 INSERT INTO daily_brief_citations (
     daily_brief_section_id,
     position,
@@ -279,4 +297,28 @@ INSERT INTO daily_brief_citations (
     created_by,
     updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`
+SELECT $1, $2, 'source_record', source_record.id, NULL, source_record.source, source_record.original_url, $6, $6
+FROM source_records AS source_record
+WHERE source_record.id = $3
+  AND source_record.source = $4
+  AND source_record.original_url = $5
+RETURNING id::text`
+
+const insertDailyBriefUpcomingEventCitationSQL = `
+INSERT INTO daily_brief_citations (
+    daily_brief_section_id,
+    position,
+    citation_kind,
+    source_record_id,
+    economic_event_id,
+    source,
+    source_url,
+    created_by,
+    updated_by
+)
+SELECT $1, $2, 'upcoming_event', NULL, economic_event.id, economic_event.source, economic_event.source_url, $6, $6
+FROM economic_events AS economic_event
+WHERE economic_event.id = $3
+  AND economic_event.source = $4
+  AND economic_event.source_url = $5
+RETURNING id::text`

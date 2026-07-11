@@ -194,6 +194,42 @@ func TestDailyBriefRepositoryRollsBackAtomicPersistence(t *testing.T) {
 	}
 }
 
+func TestDailyBriefRepositoryRejectsNonCanonicalCitationMetadata(t *testing.T) {
+	database := postgrestest.Open(t)
+	if err := databasepostgres.Migrate(t.Context(), database.Pool); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+	repository, _ := newDailyBriefRepository(database.Pool)
+	sourceID, eventID := persistDailyBriefReferences(t, database)
+	valid := persistedDailyBriefFixture(sourceID, eventID)
+
+	for _, test := range []struct {
+		name   string
+		update func(*dailyBriefCitation)
+	}{
+		{name: "mismatched source", update: func(citation *dailyBriefCitation) { citation.source = "fabricated-source" }},
+		{name: "mismatched URL", update: func(citation *dailyBriefCitation) { citation.url = "https://attacker.example/fabricated" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			brief := withPersistedBrief(valid, func(brief *dailyBrief) {
+				test.update(&brief.sections[0].citations[0])
+			})
+			if _, err := repository.PersistDailyBrief(t.Context(), brief, "brief-worker"); err == nil ||
+				!strings.Contains(err.Error(), "insert daily brief section 0 citation 0") {
+				t.Fatalf("PersistDailyBrief() error = %v, want canonical citation mismatch", err)
+			}
+
+			var count int
+			if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM daily_briefs").Scan(&count); err != nil {
+				t.Fatalf("count daily briefs: %v", err)
+			}
+			if count != 0 {
+				t.Errorf("daily brief count = %d, want mismatched citation rollback", count)
+			}
+		})
+	}
+}
+
 func TestDailyBriefRepositoryValidatesBeforePostgreSQL(t *testing.T) {
 	repository, err := newDailyBriefRepository(panicDailyBriefDB{})
 	if err != nil {
