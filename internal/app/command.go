@@ -13,7 +13,7 @@ import (
 	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|watchlists>"
 
 type command struct {
 	name                     string
@@ -21,6 +21,8 @@ type command struct {
 	upcomingEventsQuery      upcomingEventsQuery
 	dailyBriefInputQuery     dailybrief.InputQuery
 	storedDailyBriefsQuery   storedDailyBriefsQuery
+	createWatchlistCommand   createWatchlistCommand
+	watchlistsQuery          watchlistsQuery
 }
 
 func parseCommand(arguments []string) (command, error) {
@@ -58,6 +60,18 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], storedDailyBriefsQuery: query}, nil
+	case "create-watchlist":
+		createCommand, err := parseCreateWatchlistCommand(arguments[1:])
+		if err != nil {
+			return command{}, err
+		}
+		return command{name: arguments[0], createWatchlistCommand: createCommand}, nil
+	case "watchlists":
+		query, err := parseWatchlistsQuery(arguments[1:])
+		if err != nil {
+			return command{}, err
+		}
+		return command{name: arguments[0], watchlistsQuery: query}, nil
 	}
 
 	calendarCommand := findCalendarIngestionCommand(arguments[0])

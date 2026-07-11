@@ -16,6 +16,7 @@ import (
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
+	watchlistpostgres "github.com/Yanis897349/atlas/internal/watchlist/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -159,6 +160,18 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			stdout,
 			parsedCommand.storedDailyBriefsQuery,
 		)
+	case "create-watchlist":
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runCreateWatchlist(ctx, repository, stdout, parsedCommand.createWatchlistCommand)
+	case "watchlists":
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runWatchlists(ctx, repository, stdout, parsedCommand.watchlistsQuery)
 	default:
 		panic("validated command is not handled")
 	}
