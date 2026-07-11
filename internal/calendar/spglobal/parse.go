@@ -14,27 +14,17 @@ import (
 	"golang.org/x/net/html"
 )
 
-const eventName = "S&P Global Flash Eurozone PMI"
-
-var (
-	yearPattern    = regexp.MustCompile(`^\d{4}$`)
-	datePattern    = regexp.MustCompile(`^[A-Za-z]+\s+\d{1,2}$`)
-	releasePattern = regexp.MustCompile(`^(\S+)\s+UTC\s+(.+)$`)
+const (
+	eventName       = "S&P Global Flash Eurozone PMI"
+	calendarHeading = "Calendar"
+	upcomingHeading = "Upcoming"
 )
 
-type calendarToken struct {
-	kind tokenKind
-	text string
-	time string
-	name string
-}
-
-type tokenKind uint8
-
-const (
-	tokenYear tokenKind = iota + 1
-	tokenDate
-	tokenRelease
+var (
+	yearPattern = regexp.MustCompile(`^\d{4}$`)
+	wordPattern = regexp.MustCompile(`^[A-Za-z]+$`)
+	dayPattern  = regexp.MustCompile(`^\d{1,2}$`)
+	eventWords  = strings.Fields(eventName)
 )
 
 func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
@@ -42,105 +32,172 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	tokens := calendarTokens(document)
-	if err := validateCalendarTokens(tokens); err != nil {
-		return nil, err
+	heading := findCalendarHeading(document)
+	if heading == nil {
+		return nil, errors.New("calendar heading is required")
 	}
-
-	events := make([]calendar.Event, 0)
-	seen := make(map[string]struct{})
-	year := 0
-	dateText := ""
-	releaseIndex := 0
-	for _, token := range tokens {
-		switch token.kind {
-		case tokenYear:
-			year, _ = strconv.Atoi(token.text)
-			dateText = ""
-		case tokenDate:
-			dateText = token.text
-		case tokenRelease:
-			releaseIndex++
-			if token.name != eventName {
-				continue
-			}
-			event, err := normalizeRelease(year, dateText, token.time, retrievedAt)
-			if err != nil {
-				return nil, fmt.Errorf("normalize S&P Global release %d: %w", releaseIndex, err)
-			}
-			if _, exists := seen[event.ExternalEventID]; exists {
-				continue
-			}
-			seen[event.ExternalEventID] = struct{}{}
-			events = append(events, event)
-		}
+	upcoming := findUpcomingMarker(document, heading)
+	if upcoming == nil {
+		return nil, errors.New("upcoming calendar is required")
 	}
-	return events, nil
+	root := commonAncestor(heading, upcoming)
+	if root == nil {
+		return nil, errors.New("calendar structure is required")
+	}
+	return parseCalendarWords(calendarWords(root, upcoming), retrievedAt)
 }
 
-func calendarTokens(document *html.Node) []calendarToken {
-	tokens := make([]calendarToken, 0)
+func findUpcomingMarker(root, heading *html.Node) *html.Node {
+	started := false
+	var marker *html.Node
 	var walk func(*html.Node)
 	walk = func(node *html.Node) {
-		if node == nil {
+		if node == nil || marker != nil {
 			return
 		}
-		if node.Type == html.ElementNode {
-			text := sourcehtml.NormalizedText(node)
-			if token, ok := classifyToken(text); ok {
-				tokens = append(tokens, token)
-				return
-			}
+		if node == heading {
+			started = true
+			return
+		}
+		if started && node.Type == html.TextNode && strings.Join(strings.Fields(node.Data), " ") == upcomingHeading {
+			marker = node
+			return
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
 			walk(child)
 		}
 	}
-	walk(document)
-	return tokens
+	walk(root)
+	return marker
 }
 
-func classifyToken(text string) (calendarToken, bool) {
-	switch {
-	case yearPattern.MatchString(text):
-		return calendarToken{kind: tokenYear, text: text}, true
-	case datePattern.MatchString(text):
-		return calendarToken{kind: tokenDate, text: text}, true
-	case text == eventName:
-		return calendarToken{kind: tokenRelease, name: text}, true
-	case strings.Count(text, " UTC ") == 1:
-		matches := releasePattern.FindStringSubmatch(text)
-		if matches != nil {
-			return calendarToken{kind: tokenRelease, time: matches[1], name: strings.TrimSpace(matches[2])}, true
+func commonAncestor(first, second *html.Node) *html.Node {
+	ancestors := make(map[*html.Node]struct{})
+	for node := first; node != nil; node = node.Parent {
+		ancestors[node] = struct{}{}
+	}
+	for node := second; node != nil; node = node.Parent {
+		if _, exists := ancestors[node]; exists {
+			return node
 		}
-	}
-	return calendarToken{}, false
-}
-
-func validateCalendarTokens(tokens []calendarToken) error {
-	hasYear := false
-	hasDate := false
-	hasRelease := false
-	for _, token := range tokens {
-		switch token.kind {
-		case tokenYear:
-			hasYear = true
-		case tokenDate:
-			hasDate = true
-		case tokenRelease:
-			hasRelease = true
-		}
-	}
-	if !hasYear {
-		return errors.New("calendar year is required")
-	}
-	if !hasDate {
-		return errors.New("calendar date is required")
-	}
-	if !hasRelease {
-		return errors.New("calendar releases are required")
 	}
 	return nil
+}
+
+func findCalendarHeading(root *html.Node) *html.Node {
+	if root == nil {
+		return nil
+	}
+	if root.Type == html.ElementNode && isHeading(root.Data) && sourcehtml.NormalizedText(root) == calendarHeading {
+		return root
+	}
+	for child := root.FirstChild; child != nil; child = child.NextSibling {
+		if heading := findCalendarHeading(child); heading != nil {
+			return heading
+		}
+	}
+	return nil
+}
+
+func isHeading(name string) bool {
+	return len(name) == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6'
+}
+
+func calendarWords(root, marker *html.Node) []string {
+	words := make([]string, 0)
+	started := false
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node == nil {
+			return
+		}
+		if node == marker {
+			started = true
+			return
+		}
+		if started && node.Type == html.ElementNode && excludedCalendarElement(node.Data) {
+			return
+		}
+		if started && node.Type == html.TextNode {
+			words = append(words, strings.Fields(node.Data)...)
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return words
+}
+
+func excludedCalendarElement(name string) bool {
+	switch name {
+	case "footer", "header", "nav", "script", "style":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseCalendarWords(words []string, retrievedAt time.Time) ([]calendar.Event, error) {
+	events := make([]calendar.Event, 0)
+	seen := make(map[string]struct{})
+	year := 0
+	dateText := ""
+	timeText := ""
+	hasDate := false
+	hasTime := false
+	supportedIndex := 0
+	for index := 0; index < len(words); index++ {
+		switch {
+		case yearPattern.MatchString(words[index]):
+			year, _ = strconv.Atoi(words[index])
+			dateText = ""
+			timeText = ""
+		case index+1 < len(words) && wordPattern.MatchString(words[index]) && dayPattern.MatchString(words[index+1]):
+			dateText = words[index] + " " + words[index+1]
+			hasDate = true
+			timeText = ""
+			index++
+		case index+1 < len(words) && words[index+1] == "UTC":
+			timeText = words[index]
+			hasTime = true
+			index++
+		case matchesWords(words[index:], eventWords):
+			supportedIndex++
+			event, err := normalizeRelease(year, dateText, timeText, retrievedAt)
+			if err != nil {
+				return nil, fmt.Errorf("normalize S&P Global release %d: %w", supportedIndex, err)
+			}
+			if _, exists := seen[event.ExternalEventID]; !exists {
+				seen[event.ExternalEventID] = struct{}{}
+				events = append(events, event)
+			}
+			index += len(eventWords) - 1
+		}
+	}
+	if year == 0 {
+		return nil, errors.New("calendar year is required")
+	}
+	if !hasDate {
+		return nil, errors.New("calendar date is required")
+	}
+	if !hasTime {
+		return nil, errors.New("calendar releases are required")
+	}
+	return events, nil
+}
+
+func matchesWords(words, wanted []string) bool {
+	if len(words) < len(wanted) {
+		return false
+	}
+	for index := range wanted {
+		if words[index] != wanted[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeRelease(year int, dateText, timeText string, retrievedAt time.Time) (calendar.Event, error) {

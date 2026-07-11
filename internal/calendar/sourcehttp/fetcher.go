@@ -15,7 +15,7 @@ import (
 const (
 	defaultRequestBudget = 30 * time.Second
 	maxResponseSize      = 10 << 20
-	userAgent            = "Atlas (+https://github.com/Yanis897349/atlas)"
+	defaultUserAgent     = "Atlas (+https://github.com/Yanis897349/atlas)"
 )
 
 // ErrNegativeRequestBudget reports an invalid negative retrieval budget.
@@ -31,6 +31,7 @@ type Config struct {
 	Resource      string
 	URL           string
 	Accept        string
+	UserAgent     string
 	Client        Client
 	RequestBudget time.Duration
 }
@@ -40,6 +41,7 @@ type Fetcher struct {
 	resource      string
 	url           string
 	accept        string
+	userAgent     string
 	client        Client
 	requestBudget time.Duration
 }
@@ -58,6 +60,10 @@ func New(config Config) (*Fetcher, error) {
 	if accept == "" {
 		return nil, errors.New("calendar Accept media type is required")
 	}
+	userAgent := strings.TrimSpace(config.UserAgent)
+	if userAgent == "" {
+		userAgent = defaultUserAgent
+	}
 	if config.RequestBudget < 0 {
 		return nil, ErrNegativeRequestBudget
 	}
@@ -75,6 +81,7 @@ func New(config Config) (*Fetcher, error) {
 		resource:      resource,
 		url:           validatedURL,
 		accept:        accept,
+		userAgent:     userAgent,
 		client:        client,
 		requestBudget: requestBudget,
 	}, nil
@@ -103,7 +110,7 @@ func (fetcher *Fetcher) fetch(ctx context.Context, query url.Values) ([]byte, er
 		return nil, fmt.Errorf("create %s request: %w", fetcher.resource, err)
 	}
 	request.Header.Set("Accept", fetcher.accept)
-	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("User-Agent", fetcher.userAgent)
 
 	response, err := fetcher.client.Do(request)
 	if err != nil {
@@ -122,6 +129,9 @@ func (fetcher *Fetcher) fetch(ctx context.Context, query url.Values) ([]byte, er
 		_ = response.Body.Close()
 	}()
 
+	if strings.EqualFold(strings.TrimSpace(response.Header.Get("X-Amzn-Waf-Action")), "challenge") {
+		return nil, fmt.Errorf("fetch %s: upstream request challenge", fetcher.resource)
+	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("fetch %s: unexpected HTTP status %d", fetcher.resource, response.StatusCode)
 	}

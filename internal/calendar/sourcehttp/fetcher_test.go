@@ -32,11 +32,29 @@ func TestFetcherSendsBoundedCalendarRequest(t *testing.T) {
 	if client.method != http.MethodGet || client.url != "https://example.com/calendar" {
 		t.Errorf("request = %s %s, want GET https://example.com/calendar", client.method, client.url)
 	}
-	if client.accept != "text/calendar" || client.userAgent != userAgent {
-		t.Errorf("request headers = (Accept %q, User-Agent %q), want (%q, %q)", client.accept, client.userAgent, "text/calendar", userAgent)
+	if client.accept != "text/calendar" || client.userAgent != defaultUserAgent {
+		t.Errorf("request headers = (Accept %q, User-Agent %q), want (%q, %q)", client.accept, client.userAgent, "text/calendar", defaultUserAgent)
 	}
 	if !body.closed {
 		t.Error("response body was not closed")
+	}
+}
+
+func TestFetcherSendsConfiguredUserAgent(t *testing.T) {
+	client := &recordingClient{response: &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}}
+	fetcher := newFetcher(t, Config{
+		Resource:  "Example calendar",
+		URL:       "https://example.com/calendar",
+		Accept:    "text/html",
+		UserAgent: " Compatible calendar client ",
+		Client:    client,
+	})
+
+	if _, err := fetcher.Fetch(t.Context()); err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	if client.userAgent != "Compatible calendar client" {
+		t.Errorf("User-Agent = %q, want configured value", client.userAgent)
 	}
 }
 
@@ -113,6 +131,7 @@ func TestFetcherReportsRetrievalFailures(t *testing.T) {
 		{name: "nil response", client: &recordingClient{}, want: "nil response"},
 		{name: "nil body", client: &recordingClient{response: &http.Response{StatusCode: http.StatusOK}}, want: "body is nil"},
 		{name: "status", client: &recordingClient{response: &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody}}, want: "unexpected HTTP status 503"},
+		{name: "upstream challenge", client: &recordingClient{response: &http.Response{StatusCode: http.StatusAccepted, Header: http.Header{"X-Amzn-Waf-Action": {"challenge"}}, Body: http.NoBody}}, want: "upstream request challenge"},
 		{name: "read", client: &recordingClient{response: &http.Response{StatusCode: http.StatusOK, Body: &trackingBody{Reader: failingReader{}}}}, want: "read Example calendar"},
 		{
 			name: "oversized",

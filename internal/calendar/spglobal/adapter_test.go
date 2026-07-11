@@ -63,7 +63,7 @@ func TestAdapterFetchEventsNormalizesFlashEurozoneReleases(t *testing.T) {
 	if client.requests != 1 || client.method != http.MethodGet {
 		t.Errorf("requests = %d using %s, want one GET", client.requests, client.method)
 	}
-	if client.accept != "text/html" || client.userAgent != "Atlas (+https://github.com/Yanis897349/atlas)" {
+	if client.accept != "text/html" || client.userAgent != "Mozilla/5.0 (compatible; Atlas/1.0; +https://github.com/Yanis897349/atlas)" {
 		t.Errorf("request headers = Accept %q, User-Agent %q", client.accept, client.userAgent)
 	}
 }
@@ -153,9 +153,12 @@ func TestAdapterFetchEventsRejectsMalformedCalendarData(t *testing.T) {
 		{name: "invalid month", html: calendarHTML("2026", "Smarch 23", supportedRelease("08:00")), want: "invalid UTC release date and time"},
 		{name: "invalid day", html: calendarHTML("2026", "June 32", supportedRelease("08:00")), want: "invalid UTC release date and time"},
 		{name: "invalid time", html: calendarHTML("2026", "June 23", supportedRelease("8am")), want: "invalid UTC release date and time"},
-		{name: "missing calendar year", html: `<html><body><div>June 23</div><div>08:00 UTC Other PMI</div></body></html>`, want: "calendar year is required"},
-		{name: "missing calendar date", html: `<html><body><div>2026</div><div>08:00 UTC Other PMI</div></body></html>`, want: "calendar date is required"},
-		{name: "missing calendar releases", html: `<html><body><div>2026</div><div>June 23</div></body></html>`, want: "calendar releases are required"},
+		{name: "missing calendar heading", html: `<html><body><main><h1>Schedule</h1><h2>Upcoming</h2><div>2026</div><div>June 23</div><div>08:00 UTC Other PMI</div></main></body></html>`, want: "calendar heading is required"},
+		{name: "missing upcoming calendar", html: `<html><body><main><h1>Calendar</h1><div>2026</div><div>June 23</div><div>08:00 UTC Other PMI</div></main></body></html>`, want: "upcoming calendar is required"},
+		{name: "missing calendar year", html: calendarHTML("", "June 23", `<div>08:00 UTC Other PMI</div>`), want: "calendar year is required"},
+		{name: "missing calendar date", html: calendarHTML("2026", "", `<div>08:00 UTC Other PMI</div>`), want: "calendar date is required"},
+		{name: "missing calendar releases", html: calendarHTML("2026", "June 23", ""), want: "calendar releases are required"},
+		{name: "unrelated footer tokens", html: `<html><body><main><h1>Calendar</h1><p>Upcoming</p></main><footer><div>2026</div><div>June 23</div><div>08:00 UTC Other PMI</div></footer></body></html>`, want: "calendar year is required"},
 	}
 
 	for _, test := range tests {
@@ -172,7 +175,7 @@ func TestAdapterFetchEventsRejectsMalformedCalendarData(t *testing.T) {
 const supportedTitle = "S&P Global Flash Eurozone PMI"
 
 func calendarHTML(year, date, releases string) string {
-	return `<html><body><main><div>` + year + `</div><div>` + date + `</div>` + releases + `</main></body></html>`
+	return `<html><body><main><h1>Calendar</h1><h2>Upcoming</h2><div>` + year + `</div><div>` + date + `</div>` + releases + `</main></body></html>`
 }
 
 func supportedRelease(releaseTime string) string {

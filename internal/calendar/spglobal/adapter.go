@@ -17,7 +17,8 @@ const (
 	// CalendarURL is the canonical public S&P Global PMI release calendar.
 	CalendarURL = "https://www.pmi.spglobal.com/Public/Release/ReleaseDates?language=en"
 
-	resource = "S&P Global PMI calendar"
+	resource  = "S&P Global PMI calendar"
+	userAgent = "Mozilla/5.0 (compatible; Atlas/1.0; +https://github.com/Yanis897349/atlas)"
 )
 
 // HTTPClient is the subset of http.Client used to retrieve the calendar.
@@ -47,6 +48,7 @@ func NewAdapter(config Config) (*Adapter, error) {
 		Resource:      resource,
 		URL:           calendarURL,
 		Accept:        "text/html",
+		UserAgent:     userAgent,
 		Client:        config.Client,
 		RequestBudget: config.RequestBudget,
 	})
