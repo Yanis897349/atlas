@@ -12,6 +12,7 @@ import (
 
 	"github.com/Yanis897349/atlas/internal/calendar"
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
@@ -115,7 +116,7 @@ func TestRunGeneratesDailyBriefEndToEnd(t *testing.T) {
 		t.Errorf("stored command times = %#v, want UTC output", output)
 	}
 	citation := output.Sections[0].Citations[0]
-	if citation.Kind != dailyBriefCitationUpcomingEvent || citation.Source != "example-calendar" ||
+	if citation.Kind != dailybrief.CitationUpcomingEvent || citation.Source != "example-calendar" ||
 		citation.URL != "https://example.com/calendar/first" {
 		t.Errorf("command citation = %#v, want canonical first-event citation", citation)
 	}

@@ -1,4 +1,4 @@
-package app
+package openai
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
 type openAIResponsesResponse struct {
@@ -52,20 +54,20 @@ type openAISectionDraftOutput struct {
 }
 
 type openAICitationDraftOutput struct {
-	Kind dailyBriefCitationKind `json:"kind"`
-	ID   string                 `json:"id"`
+	Kind dailybrief.CitationKind `json:"kind"`
+	ID   string                  `json:"id"`
 }
 
-func decodeOpenAIDailyBriefResponse(body []byte) (dailyBriefDraft, error) {
+func decodeOpenAIDailyBriefResponse(body []byte) (dailybrief.Draft, error) {
 	var response openAIResponsesResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("decode response envelope: %w", err)
+		return dailybrief.Draft{}, fmt.Errorf("decode response envelope: %w", err)
 	}
 	if response.Status != "completed" {
-		return dailyBriefDraft{}, openAIIncompleteResponseError(response)
+		return dailybrief.Draft{}, openAIIncompleteResponseError(response)
 	}
 	if response.Error != nil {
-		return dailyBriefDraft{}, errors.New("completed response contains a provider error")
+		return dailybrief.Draft{}, errors.New("completed response contains a provider error")
 	}
 
 	var outputText string
@@ -77,52 +79,52 @@ func decodeOpenAIDailyBriefResponse(body []byte) (dailyBriefDraft, error) {
 		case "message":
 			messageCount++
 		default:
-			return dailyBriefDraft{}, fmt.Errorf("unexpected output item type %q", output.Type)
+			return dailybrief.Draft{}, fmt.Errorf("unexpected output item type %q", output.Type)
 		}
 		if output.Role != "assistant" {
-			return dailyBriefDraft{}, fmt.Errorf("unexpected message role %q", output.Role)
+			return dailybrief.Draft{}, fmt.Errorf("unexpected message role %q", output.Role)
 		}
 		if len(output.Content) != 1 {
-			return dailyBriefDraft{}, fmt.Errorf("assistant message has %d content items, want 1", len(output.Content))
+			return dailybrief.Draft{}, fmt.Errorf("assistant message has %d content items, want 1", len(output.Content))
 		}
 		content := output.Content[0]
 		switch content.Type {
 		case "refusal":
-			return dailyBriefDraft{}, errors.New("OpenAI refused to generate the daily brief")
+			return dailybrief.Draft{}, errors.New("OpenAI refused to generate the daily brief")
 		case "output_text":
 			outputText = content.Text
 		default:
-			return dailyBriefDraft{}, fmt.Errorf("unexpected message content type %q", content.Type)
+			return dailybrief.Draft{}, fmt.Errorf("unexpected message content type %q", content.Type)
 		}
 	}
 	if messageCount != 1 {
-		return dailyBriefDraft{}, fmt.Errorf("response has %d assistant messages, want 1", messageCount)
+		return dailybrief.Draft{}, fmt.Errorf("response has %d assistant messages, want 1", messageCount)
 	}
 
 	var providerDraft openAIDraftOutput
 	decoder := json.NewDecoder(bytes.NewBufferString(outputText))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&providerDraft); err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("decode structured daily brief: %w", err)
+		return dailybrief.Draft{}, fmt.Errorf("decode structured daily brief: %w", err)
 	}
 	if err := requireJSONEOF(decoder); err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("decode structured daily brief: %w", err)
+		return dailybrief.Draft{}, fmt.Errorf("decode structured daily brief: %w", err)
 	}
 
-	draft := dailyBriefDraft{sections: make([]dailyBriefSectionDraft, 0, len(providerDraft.Sections))}
+	draft := dailybrief.Draft{Sections: make([]dailybrief.SectionDraft, 0, len(providerDraft.Sections))}
 	for _, providerSection := range providerDraft.Sections {
-		section := dailyBriefSectionDraft{
-			heading:   providerSection.Heading,
-			content:   providerSection.Content,
-			citations: make([]dailyBriefCitationReference, 0, len(providerSection.Citations)),
+		section := dailybrief.SectionDraft{
+			Heading:   providerSection.Heading,
+			Content:   providerSection.Content,
+			Citations: make([]dailybrief.CitationReference, 0, len(providerSection.Citations)),
 		}
 		for _, citation := range providerSection.Citations {
-			section.citations = append(section.citations, dailyBriefCitationReference{
-				kind: citation.Kind,
-				id:   citation.ID,
+			section.Citations = append(section.Citations, dailybrief.CitationReference{
+				Kind: citation.Kind,
+				ID:   citation.ID,
 			})
 		}
-		draft.sections = append(draft.sections, section)
+		draft.Sections = append(draft.Sections, section)
 	}
 	return draft, nil
 }

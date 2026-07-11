@@ -19,22 +19,9 @@ type DB interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-// MaxRecentSourceRecordsLimit bounds one recent-source-record retrieval.
-const MaxRecentSourceRecordsLimit = 100
-
 // Repository persists normalized source records.
 type Repository struct {
 	db DB
-}
-
-// StoredSourceRecord is a normalized source record with its persistence metadata.
-type StoredSourceRecord struct {
-	ID string
-	ingestion.SourceRecord
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	CreatedBy string
-	UpdatedBy string
 }
 
 // NewRepository returns a source-record repository backed by db.
@@ -52,10 +39,10 @@ func (repository *Repository) UpsertSourceRecord(
 	ctx context.Context,
 	record ingestion.SourceRecord,
 	actor string,
-) (StoredSourceRecord, error) {
+) (ingestion.StoredSourceRecord, error) {
 	actor = strings.TrimSpace(actor)
 	if err := validateSourceRecord(record, actor); err != nil {
-		return StoredSourceRecord{}, err
+		return ingestion.StoredSourceRecord{}, err
 	}
 
 	record.PublishedAt = record.PublishedAt.UTC()
@@ -76,7 +63,7 @@ func (repository *Repository) UpsertSourceRecord(
 		return stored, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return StoredSourceRecord{}, fmt.Errorf("upsert source record: %w", err)
+		return ingestion.StoredSourceRecord{}, fmt.Errorf("upsert source record: %w", err)
 	}
 
 	stored, err = scanSourceRecord(repository.db.QueryRow(
@@ -86,7 +73,7 @@ func (repository *Repository) UpsertSourceRecord(
 		record.SourceItemID,
 	))
 	if err != nil {
-		return StoredSourceRecord{}, fmt.Errorf("load unchanged source record: %w", err)
+		return ingestion.StoredSourceRecord{}, fmt.Errorf("load unchanged source record: %w", err)
 	}
 
 	return stored, nil
@@ -104,7 +91,7 @@ func (repository *Repository) RecentSourceRecords(
 	windowStart time.Time,
 	windowEnd time.Time,
 	limit int,
-) ([]StoredSourceRecord, error) {
+) ([]ingestion.StoredSourceRecord, error) {
 	if err := validateRecentSourceRecordsQuery(windowStart, windowEnd, limit); err != nil {
 		return nil, err
 	}
@@ -121,7 +108,7 @@ func (repository *Repository) RecentSourceRecords(
 	}
 	defer rows.Close()
 
-	records := make([]StoredSourceRecord, 0, limit)
+	records := make([]ingestion.StoredSourceRecord, 0, limit)
 	for rows.Next() {
 		record, scanErr := scanSourceRecord(rows)
 		if scanErr != nil {
@@ -136,8 +123,8 @@ func (repository *Repository) RecentSourceRecords(
 	return records, nil
 }
 
-func scanSourceRecord(row pgx.Row) (StoredSourceRecord, error) {
-	var record StoredSourceRecord
+func scanSourceRecord(row pgx.Row) (ingestion.StoredSourceRecord, error) {
+	var record ingestion.StoredSourceRecord
 	err := row.Scan(
 		&record.ID,
 		&record.Source,
@@ -194,8 +181,8 @@ func validateRecentSourceRecordsQuery(windowStart time.Time, windowEnd time.Time
 	if windowEnd.Before(windowStart) {
 		return errors.New("window end must not be before window start")
 	}
-	if limit < 1 || limit > MaxRecentSourceRecordsLimit {
-		return fmt.Errorf("limit must be between 1 and %d", MaxRecentSourceRecordsLimit)
+	if limit < 1 || limit > ingestion.MaxRecentSourceRecordsLimit {
+		return fmt.Errorf("limit must be between 1 and %d", ingestion.MaxRecentSourceRecordsLimit)
 	}
 
 	return nil

@@ -1,4 +1,4 @@
-package app
+package openai
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
-	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
-	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
+	"github.com/Yanis897349/atlas/internal/ingestion"
 )
 
 const openAIDailyBriefInstructions = `Create a concise macro daily brief using only the supplied source records and upcoming events. Explain context without predicting markets. Every section must cite at least one supplied item using its exact citation kind and ID. Do not invent facts, identifiers, sources, or URLs.`
@@ -103,7 +103,7 @@ type openAIDailyBriefUpcomingEvent struct {
 	RetrievedAt     string             `json:"retrieved_at"`
 }
 
-func newOpenAIDailyBriefRequest(ctx context.Context, model string, input dailyBriefInput) ([]byte, error) {
+func newOpenAIDailyBriefRequest(ctx context.Context, model string, input dailybrief.Input) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -145,17 +145,17 @@ func newOpenAIDailyBriefRequest(ctx context.Context, model string, input dailyBr
 	return request, nil
 }
 
-func validateOpenAIDailyBriefInputSize(input dailyBriefInput) error {
-	if len(input.sourceRecords) > ingestionpostgres.MaxRecentSourceRecordsLimit {
+func validateOpenAIDailyBriefInputSize(input dailybrief.Input) error {
+	if len(input.SourceRecords) > ingestion.MaxRecentSourceRecordsLimit {
 		return fmt.Errorf(
 			"daily brief input has more than %d source records",
-			ingestionpostgres.MaxRecentSourceRecordsLimit,
+			ingestion.MaxRecentSourceRecordsLimit,
 		)
 	}
-	if len(input.upcomingEvents) > calendarpostgres.MaxUpcomingEventsLimit {
+	if len(input.UpcomingEvents) > calendar.MaxUpcomingEventsLimit {
 		return fmt.Errorf(
 			"daily brief input has more than %d upcoming events",
-			calendarpostgres.MaxUpcomingEventsLimit,
+			calendar.MaxUpcomingEventsLimit,
 		)
 	}
 
@@ -168,10 +168,10 @@ func validateOpenAIDailyBriefInputSize(input dailyBriefInput) error {
 		return nil
 	}
 
-	if err := add(string(input.region)); err != nil {
+	if err := add(string(input.Region)); err != nil {
 		return err
 	}
-	for _, record := range input.sourceRecords {
+	for _, record := range input.SourceRecords {
 		for _, value := range []string{
 			record.ID,
 			record.Source,
@@ -184,7 +184,7 @@ func validateOpenAIDailyBriefInputSize(input dailyBriefInput) error {
 			}
 		}
 	}
-	for _, event := range input.upcomingEvents {
+	for _, event := range input.UpcomingEvents {
 		for _, value := range []string{
 			event.ID,
 			event.Source,
@@ -202,21 +202,21 @@ func validateOpenAIDailyBriefInputSize(input dailyBriefInput) error {
 	return nil
 }
 
-func newOpenAIDailyBriefInput(input dailyBriefInput) openAIDailyBriefInput {
+func newOpenAIDailyBriefInput(input dailybrief.Input) openAIDailyBriefInput {
 	providerInput := openAIDailyBriefInput{
-		Region: input.region,
+		Region: input.Region,
 		PublicationWindow: openAIDailyBriefWindow{
-			From: formatOpenAITime(input.publicationWindowStart),
-			To:   formatOpenAITime(input.publicationWindowEnd),
+			From: formatOpenAITime(input.PublicationWindowStart),
+			To:   formatOpenAITime(input.PublicationWindowEnd),
 		},
 		EventWindow: openAIDailyBriefWindow{
-			From: formatOpenAITime(input.eventWindowStart),
-			To:   formatOpenAITime(input.eventWindowEnd),
+			From: formatOpenAITime(input.EventWindowStart),
+			To:   formatOpenAITime(input.EventWindowEnd),
 		},
-		SourceRecords:  make([]openAIDailyBriefSourceRecord, 0, len(input.sourceRecords)),
-		UpcomingEvents: make([]openAIDailyBriefUpcomingEvent, 0, len(input.upcomingEvents)),
+		SourceRecords:  make([]openAIDailyBriefSourceRecord, 0, len(input.SourceRecords)),
+		UpcomingEvents: make([]openAIDailyBriefUpcomingEvent, 0, len(input.UpcomingEvents)),
 	}
-	for _, record := range input.sourceRecords {
+	for _, record := range input.SourceRecords {
 		providerInput.SourceRecords = append(providerInput.SourceRecords, openAIDailyBriefSourceRecord{
 			ID:           record.ID,
 			Source:       record.Source,
@@ -227,7 +227,7 @@ func newOpenAIDailyBriefInput(input dailyBriefInput) openAIDailyBriefInput {
 			RetrievedAt:  formatOpenAITime(record.RetrievedAt),
 		})
 	}
-	for _, event := range input.upcomingEvents {
+	for _, event := range input.UpcomingEvents {
 		providerInput.UpcomingEvents = append(providerInput.UpcomingEvents, openAIDailyBriefUpcomingEvent{
 			ID:              event.ID,
 			Source:          event.Source,

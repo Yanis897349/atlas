@@ -1,4 +1,4 @@
-package app
+package postgres
 
 import (
 	"context"
@@ -6,15 +6,17 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
-func (repository *dailyBriefRepository) StoredDailyBriefs(
+// StoredDailyBriefs returns briefs created within the inclusive time window.
+func (repository *Repository) StoredDailyBriefs(
 	ctx context.Context,
 	region calendar.Region,
 	windowStart time.Time,
 	windowEnd time.Time,
 	limit int,
-) ([]storedDailyBrief, error) {
+) ([]dailybrief.StoredBrief, error) {
 	if err := validateStoredDailyBriefsQuery(region, windowStart, windowEnd, limit); err != nil {
 		return nil, err
 	}
@@ -32,58 +34,58 @@ func (repository *dailyBriefRepository) StoredDailyBriefs(
 	}
 	defer rows.Close()
 
-	briefs := make([]storedDailyBrief, 0, limit)
+	briefs := make([]dailybrief.StoredBrief, 0, limit)
 	var currentBriefID, currentSectionID string
 	for rows.Next() {
 		var (
 			briefID, sectionID string
-			brief              dailyBrief
+			brief              dailybrief.Brief
 			createdAt          time.Time
 			updatedAt          time.Time
 			createdBy          string
 			updatedBy          string
-			section            dailyBriefSection
-			citation           dailyBriefCitation
+			section            dailybrief.Section
+			citation           dailybrief.Citation
 		)
 		if err := rows.Scan(
 			&briefID,
-			&brief.region,
-			&brief.publicationWindowStart,
-			&brief.publicationWindowEnd,
-			&brief.eventWindowStart,
-			&brief.eventWindowEnd,
-			&brief.provider,
-			&brief.model,
+			&brief.Region,
+			&brief.PublicationWindowStart,
+			&brief.PublicationWindowEnd,
+			&brief.EventWindowStart,
+			&brief.EventWindowEnd,
+			&brief.Provider,
+			&brief.Model,
 			&createdAt,
 			&updatedAt,
 			&createdBy,
 			&updatedBy,
 			&sectionID,
-			&section.heading,
-			&section.content,
-			&citation.kind,
-			&citation.id,
-			&citation.source,
-			&citation.url,
+			&section.Heading,
+			&section.Content,
+			&citation.Kind,
+			&citation.ID,
+			&citation.Source,
+			&citation.URL,
 		); err != nil {
 			return nil, fmt.Errorf("scan stored daily brief: %w", err)
 		}
-		brief.publicationWindowStart = brief.publicationWindowStart.UTC()
-		brief.publicationWindowEnd = brief.publicationWindowEnd.UTC()
-		brief.eventWindowStart = brief.eventWindowStart.UTC()
-		brief.eventWindowEnd = brief.eventWindowEnd.UTC()
+		brief.PublicationWindowStart = brief.PublicationWindowStart.UTC()
+		brief.PublicationWindowEnd = brief.PublicationWindowEnd.UTC()
+		brief.EventWindowStart = brief.EventWindowStart.UTC()
+		brief.EventWindowEnd = brief.EventWindowEnd.UTC()
 		createdAt = createdAt.UTC()
 		updatedAt = updatedAt.UTC()
 
 		if briefID != currentBriefID {
-			brief.sections = make([]dailyBriefSection, 0, 1)
-			briefs = append(briefs, storedDailyBrief{
-				ID:         briefID,
-				dailyBrief: brief,
-				CreatedAt:  createdAt,
-				UpdatedAt:  updatedAt,
-				CreatedBy:  createdBy,
-				UpdatedBy:  updatedBy,
+			brief.Sections = make([]dailybrief.Section, 0, 1)
+			briefs = append(briefs, dailybrief.StoredBrief{
+				ID:        briefID,
+				Brief:     brief,
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+				CreatedBy: createdBy,
+				UpdatedBy: updatedBy,
 			})
 			currentBriefID = briefID
 			currentSectionID = ""
@@ -91,13 +93,13 @@ func (repository *dailyBriefRepository) StoredDailyBriefs(
 
 		briefIndex := len(briefs) - 1
 		if sectionID != currentSectionID {
-			section.citations = make([]dailyBriefCitation, 0, 1)
-			briefs[briefIndex].sections = append(briefs[briefIndex].sections, section)
+			section.Citations = make([]dailybrief.Citation, 0, 1)
+			briefs[briefIndex].Sections = append(briefs[briefIndex].Sections, section)
 			currentSectionID = sectionID
 		}
-		sectionIndex := len(briefs[briefIndex].sections) - 1
-		briefs[briefIndex].sections[sectionIndex].citations = append(
-			briefs[briefIndex].sections[sectionIndex].citations,
+		sectionIndex := len(briefs[briefIndex].Sections) - 1
+		briefs[briefIndex].Sections[sectionIndex].Citations = append(
+			briefs[briefIndex].Sections[sectionIndex].Citations,
 			citation,
 		)
 	}

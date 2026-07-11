@@ -8,17 +8,19 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
 func TestRunDailyBriefWritesCanonicalCitedJSON(t *testing.T) {
 	input := dailyBriefGenerationInput()
-	generator := &dailyBriefGeneratorStub{draft: dailyBriefDraft{sections: []dailyBriefSectionDraft{
+	generator := &dailyBriefGeneratorStub{draft: dailybrief.Draft{Sections: []dailybrief.SectionDraft{
 		{
-			heading: "What to watch & why",
-			content: "The release matters <now>.",
-			citations: []dailyBriefCitationReference{
-				{kind: dailyBriefCitationUpcomingEvent, id: "event-gdp"},
-				{kind: dailyBriefCitationSourceRecord, id: "record-news"},
+			Heading: "What to watch & why",
+			Content: "The release matters <now>.",
+			Citations: []dailybrief.CitationReference{
+				{Kind: dailybrief.CitationUpcomingEvent, ID: "event-gdp"},
+				{Kind: dailybrief.CitationSourceRecord, ID: "record-news"},
 			},
 		},
 	}}}
@@ -27,8 +29,8 @@ func TestRunDailyBriefWritesCanonicalCitedJSON(t *testing.T) {
 
 	err := runDailyBrief(
 		t.Context(),
-		&dailyBriefSourceRecordsStub{records: input.sourceRecords},
-		&dailyBriefEventsStub{events: input.upcomingEvents},
+		&dailyBriefSourceRecordsStub{records: input.SourceRecords},
+		&dailyBriefEventsStub{events: input.UpcomingEvents},
 		generator,
 		persistence,
 		stdout,
@@ -49,7 +51,7 @@ func TestRunDailyBriefWritesCanonicalCitedJSON(t *testing.T) {
 	if !strings.Contains(stdout.String(), "<now>") {
 		t.Errorf("stdout = %q, want unescaped HTML characters", stdout.String())
 	}
-	if generator.calls != 1 || len(generator.input.sourceRecords) != 1 || len(generator.input.upcomingEvents) != 1 {
+	if generator.calls != 1 || len(generator.input.SourceRecords) != 1 || len(generator.input.UpcomingEvents) != 1 {
 		t.Errorf("generator input = %#v after %d calls", generator.input, generator.calls)
 	}
 	if persistence.calls != 1 || persistence.actor != dailyBriefGenerationActor {
@@ -61,10 +63,10 @@ func TestRunDailyBriefPreservesFailures(t *testing.T) {
 	input := dailyBriefGenerationInput()
 	tests := []struct {
 		name      string
-		sources   recentSourceRecordsRepository
-		events    dailyBriefEventsRepository
-		generator dailyBriefGenerator
-		briefs    dailyBriefPersistence
+		sources   dailybrief.SourceRecords
+		events    dailybrief.Events
+		generator dailybrief.Generator
+		briefs    dailybrief.Persistence
 		wantErr   error
 		contains  string
 		persisted int
@@ -77,19 +79,19 @@ func TestRunDailyBriefPreservesFailures(t *testing.T) {
 		},
 		{
 			name:      "provider cancellation",
-			sources:   &dailyBriefSourceRecordsStub{records: input.sourceRecords},
-			events:    &dailyBriefEventsStub{events: input.upcomingEvents},
+			sources:   &dailyBriefSourceRecordsStub{records: input.SourceRecords},
+			events:    &dailyBriefEventsStub{events: input.UpcomingEvents},
 			generator: &dailyBriefGeneratorStub{err: context.Canceled},
 			briefs:    &dailyBriefPersistenceStub{},
 			wantErr:   context.Canceled, contains: "generate daily brief: generate daily brief with provider",
 		},
 		{
 			name:    "citation validation",
-			sources: &dailyBriefSourceRecordsStub{records: input.sourceRecords},
-			events:  &dailyBriefEventsStub{events: input.upcomingEvents},
-			generator: &dailyBriefGeneratorStub{draft: dailyBriefDraft{sections: []dailyBriefSectionDraft{{
-				heading: "Invalid", content: "Unknown source.", citations: []dailyBriefCitationReference{{
-					kind: dailyBriefCitationSourceRecord, id: "missing",
+			sources: &dailyBriefSourceRecordsStub{records: input.SourceRecords},
+			events:  &dailyBriefEventsStub{events: input.UpcomingEvents},
+			generator: &dailyBriefGeneratorStub{draft: dailybrief.Draft{Sections: []dailybrief.SectionDraft{{
+				Heading: "Invalid", Content: "Unknown source.", Citations: []dailybrief.CitationReference{{
+					Kind: dailybrief.CitationSourceRecord, ID: "missing",
 				}},
 			}}}},
 			briefs:   &dailyBriefPersistenceStub{},
@@ -97,8 +99,8 @@ func TestRunDailyBriefPreservesFailures(t *testing.T) {
 		},
 		{
 			name:      "persistence",
-			sources:   &dailyBriefSourceRecordsStub{records: input.sourceRecords},
-			events:    &dailyBriefEventsStub{events: input.upcomingEvents},
+			sources:   &dailyBriefSourceRecordsStub{records: input.SourceRecords},
+			events:    &dailyBriefEventsStub{events: input.UpcomingEvents},
 			generator: validDailyBriefGenerator(),
 			briefs:    &dailyBriefPersistenceStub{err: context.Canceled},
 			wantErr:   context.Canceled,
@@ -140,7 +142,7 @@ func TestRunDailyBriefPassesEmptyRetrievedInputToGenerator(t *testing.T) {
 	if err == nil || !errors.Is(err, providerErr) {
 		t.Fatalf("runDailyBrief() error = %v, want provider failure", err)
 	}
-	if generator.calls != 1 || len(generator.input.sourceRecords) != 0 || len(generator.input.upcomingEvents) != 0 {
+	if generator.calls != 1 || len(generator.input.SourceRecords) != 0 || len(generator.input.UpcomingEvents) != 0 {
 		t.Errorf("generator input = %#v after %d calls, want empty retrieved slices", generator.input, generator.calls)
 	}
 }
@@ -150,11 +152,11 @@ func TestRunDailyBriefReportsWriterFailure(t *testing.T) {
 	writeErr := errors.New("output unavailable")
 	err := runDailyBrief(
 		t.Context(),
-		&dailyBriefSourceRecordsStub{records: input.sourceRecords},
-		&dailyBriefEventsStub{events: input.upcomingEvents},
-		&dailyBriefGeneratorStub{draft: dailyBriefDraft{sections: []dailyBriefSectionDraft{{
-			heading: "Section", content: "Cited content.", citations: []dailyBriefCitationReference{{
-				kind: dailyBriefCitationSourceRecord, id: "record-news",
+		&dailyBriefSourceRecordsStub{records: input.SourceRecords},
+		&dailyBriefEventsStub{events: input.UpcomingEvents},
+		&dailyBriefGeneratorStub{draft: dailybrief.Draft{Sections: []dailybrief.SectionDraft{{
+			Heading: "Section", Content: "Cited content.", Citations: []dailybrief.CitationReference{{
+				Kind: dailybrief.CitationSourceRecord, ID: "record-news",
 			}},
 		}}}},
 		&dailyBriefPersistenceStub{},
@@ -166,47 +168,47 @@ func TestRunDailyBriefReportsWriterFailure(t *testing.T) {
 	}
 }
 
-func validDailyBriefGenerator() dailyBriefGenerator {
-	return &dailyBriefGeneratorStub{draft: dailyBriefDraft{sections: []dailyBriefSectionDraft{{
-		heading: "Section",
-		content: "Cited content.",
-		citations: []dailyBriefCitationReference{{
-			kind: dailyBriefCitationSourceRecord,
-			id:   "record-news",
+func validDailyBriefGenerator() dailybrief.Generator {
+	return &dailyBriefGeneratorStub{draft: dailybrief.Draft{Sections: []dailybrief.SectionDraft{{
+		Heading: "Section",
+		Content: "Cited content.",
+		Citations: []dailybrief.CitationReference{{
+			Kind: dailybrief.CitationSourceRecord,
+			ID:   "record-news",
 		}},
 	}}}}
 }
 
 type dailyBriefPersistenceStub struct {
-	stored storedDailyBrief
+	stored dailybrief.StoredBrief
 	err    error
 	calls  int
-	brief  dailyBrief
+	brief  dailybrief.Brief
 	actor  string
 }
 
 func (repository *dailyBriefPersistenceStub) PersistDailyBrief(
 	_ context.Context,
-	brief dailyBrief,
+	brief dailybrief.Brief,
 	actor string,
-) (storedDailyBrief, error) {
+) (dailybrief.StoredBrief, error) {
 	repository.calls++
 	repository.brief = brief
 	repository.actor = actor
 	if repository.err != nil {
-		return storedDailyBrief{}, repository.err
+		return dailybrief.StoredBrief{}, repository.err
 	}
 	if repository.stored.ID != "" {
 		return repository.stored, nil
 	}
 	createdAt := time.Date(2026, time.July, 11, 20, 0, 0, 0, time.UTC)
-	return storedDailyBrief{
-		ID:         "00000000-0000-0000-0000-000000000001",
-		dailyBrief: brief,
-		CreatedAt:  createdAt,
-		UpdatedAt:  createdAt,
-		CreatedBy:  actor,
-		UpdatedBy:  actor,
+	return dailybrief.StoredBrief{
+		ID:        "00000000-0000-0000-0000-000000000001",
+		Brief:     brief,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+		CreatedBy: actor,
+		UpdatedBy: actor,
 	}, nil
 }
 

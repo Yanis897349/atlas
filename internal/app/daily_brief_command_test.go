@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
-	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
-	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
+	"github.com/Yanis897349/atlas/internal/ingestion"
 )
 
 func TestParseDailyBriefInputQuery(t *testing.T) {
@@ -27,8 +27,8 @@ func TestParseDailyBriefInputQuery(t *testing.T) {
 		t.Fatalf("parseDailyBriefInputQuery() error = %v", err)
 	}
 
-	if query.region != calendar.RegionUnitedStates || query.sourceRecordLimit != 12 || query.upcomingEventLimit != 7 {
-		t.Errorf("query classification = (%q, %d, %d), want (%q, 12, 7)", query.region, query.sourceRecordLimit, query.upcomingEventLimit, calendar.RegionUnitedStates)
+	if query.Region != calendar.RegionUnitedStates || query.SourceRecordLimit != 12 || query.UpcomingEventLimit != 7 {
+		t.Errorf("query classification = (%q, %d, %d), want (%q, 12, 7)", query.Region, query.SourceRecordLimit, query.UpcomingEventLimit, calendar.RegionUnitedStates)
 	}
 	wantTimes := []time.Time{
 		time.Date(2026, time.July, 11, 8, 0, 0, 0, time.UTC),
@@ -37,10 +37,10 @@ func TestParseDailyBriefInputQuery(t *testing.T) {
 		time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC),
 	}
 	gotTimes := []time.Time{
-		query.publicationWindowStart,
-		query.publicationWindowEnd,
-		query.eventWindowStart,
-		query.eventWindowEnd,
+		query.PublicationWindowStart,
+		query.PublicationWindowEnd,
+		query.EventWindowStart,
+		query.EventWindowEnd,
 	}
 	for index := range wantTimes {
 		if !gotTimes[index].Equal(wantTimes[index]) {
@@ -114,17 +114,17 @@ func TestRunDailyBriefInputWritesContextJSON(t *testing.T) {
 	record.OriginalURL = "https://example.com/news/story-1?market=fx&region=eu"
 	event := newStoredEvent("event-1", eventStart)
 	event.SourceURL = "https://example.com/calendar/event-1?view=full&lang=en"
-	query := dailyBriefInputQuery{
-		region:                 calendar.RegionEurozone,
-		publicationWindowStart: publicationStart,
-		publicationWindowEnd:   publicationEnd,
-		sourceRecordLimit:      1,
-		eventWindowStart:       eventStart,
-		eventWindowEnd:         eventEnd,
-		upcomingEventLimit:     1,
+	query := dailybrief.InputQuery{
+		Region:                 calendar.RegionEurozone,
+		PublicationWindowStart: publicationStart,
+		PublicationWindowEnd:   publicationEnd,
+		SourceRecordLimit:      1,
+		EventWindowStart:       eventStart,
+		EventWindowEnd:         eventEnd,
+		UpcomingEventLimit:     1,
 	}
-	sourceRepository := &dailyBriefSourceRecordsStub{records: []ingestionpostgres.StoredSourceRecord{record}}
-	eventRepository := &dailyBriefEventsStub{events: []calendarpostgres.StoredEvent{event}}
+	sourceRepository := &dailyBriefSourceRecordsStub{records: []ingestion.StoredSourceRecord{record}}
+	eventRepository := &dailyBriefEventsStub{events: []calendar.StoredEvent{event}}
 	stdout := &bytes.Buffer{}
 
 	if err := runDailyBriefInput(t.Context(), sourceRepository, eventRepository, stdout, query); err != nil {
@@ -159,8 +159,8 @@ func TestRunDailyBriefInputWritesEmptyArrays(t *testing.T) {
 func TestRunDailyBriefInputPreservesFailures(t *testing.T) {
 	tests := []struct {
 		name    string
-		sources recentSourceRecordsRepository
-		events  dailyBriefEventsRepository
+		sources dailybrief.SourceRecords
+		events  dailybrief.Events
 		err     error
 		context string
 	}{

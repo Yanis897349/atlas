@@ -4,13 +4,14 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
 type dailyBriefCitationOutput struct {
-	Kind   dailyBriefCitationKind `json:"kind"`
-	ID     string                 `json:"id"`
-	Source string                 `json:"source"`
-	URL    string                 `json:"url"`
+	Kind   dailybrief.CitationKind `json:"kind"`
+	ID     string                  `json:"id"`
+	Source string                  `json:"source"`
+	URL    string                  `json:"url"`
 }
 
 type dailyBriefSectionOutput struct {
@@ -33,39 +34,39 @@ type dailyBriefOutput struct {
 	UpdatedBy         string                    `json:"updated_by"`
 }
 
-func newDailyBriefOutput(stored storedDailyBrief) dailyBriefOutput {
-	brief := stored.dailyBrief
+func newDailyBriefOutput(stored dailybrief.StoredBrief) dailyBriefOutput {
+	brief := stored.Brief
 	output := dailyBriefOutput{
 		ID:     stored.ID,
-		Region: brief.region,
+		Region: brief.Region,
 		PublicationWindow: dailyBriefWindowOutput{
-			From: formatDailyBriefOutputTime(brief.publicationWindowStart),
-			To:   formatDailyBriefOutputTime(brief.publicationWindowEnd),
+			From: formatDailyBriefOutputTime(brief.PublicationWindowStart),
+			To:   formatDailyBriefOutputTime(brief.PublicationWindowEnd),
 		},
 		EventWindow: dailyBriefWindowOutput{
-			From: formatDailyBriefOutputTime(brief.eventWindowStart),
-			To:   formatDailyBriefOutputTime(brief.eventWindowEnd),
+			From: formatDailyBriefOutputTime(brief.EventWindowStart),
+			To:   formatDailyBriefOutputTime(brief.EventWindowEnd),
 		},
-		Provider:  brief.provider,
-		Model:     brief.model,
-		Sections:  make([]dailyBriefSectionOutput, 0, len(brief.sections)),
+		Provider:  brief.Provider,
+		Model:     brief.Model,
+		Sections:  make([]dailyBriefSectionOutput, 0, len(brief.Sections)),
 		CreatedAt: formatDailyBriefOutputTime(stored.CreatedAt),
 		UpdatedAt: formatDailyBriefOutputTime(stored.UpdatedAt),
 		CreatedBy: stored.CreatedBy,
 		UpdatedBy: stored.UpdatedBy,
 	}
-	for _, section := range brief.sections {
+	for _, section := range brief.Sections {
 		sectionOutput := dailyBriefSectionOutput{
-			Heading:   section.heading,
-			Content:   section.content,
-			Citations: make([]dailyBriefCitationOutput, 0, len(section.citations)),
+			Heading:   section.Heading,
+			Content:   section.Content,
+			Citations: make([]dailyBriefCitationOutput, 0, len(section.Citations)),
 		}
-		for _, citation := range section.citations {
+		for _, citation := range section.Citations {
 			sectionOutput.Citations = append(sectionOutput.Citations, dailyBriefCitationOutput{
-				Kind:   citation.kind,
-				ID:     citation.id,
-				Source: citation.source,
-				URL:    citation.url,
+				Kind:   citation.Kind,
+				ID:     citation.ID,
+				Source: citation.Source,
+				URL:    citation.URL,
 			})
 		}
 		output.Sections = append(output.Sections, sectionOutput)

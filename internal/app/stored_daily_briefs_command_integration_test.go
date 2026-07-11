@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
+	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 )
 
@@ -17,9 +19,9 @@ func TestRunReadsStoredDailyBriefsEndToEnd(t *testing.T) {
 	if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
 		t.Fatalf("Run(migrate) error = %v", err)
 	}
-	repository, err := newDailyBriefRepository(database.Pool)
+	repository, err := dailybriefpostgres.NewRepository(database.Pool)
 	if err != nil {
-		t.Fatalf("newDailyBriefRepository() error = %v", err)
+		t.Fatalf("NewRepository() error = %v", err)
 	}
 	sourceID, eventID := persistDailyBriefReferences(t, database)
 
@@ -38,10 +40,10 @@ func TestRunReadsStoredDailyBriefsEndToEnd(t *testing.T) {
 		{name: "after", region: calendar.RegionUnitedStates, createdAt: windowEnd.Add(time.Microsecond)},
 		{name: "other-region", region: calendar.RegionEurozone, createdAt: windowStart.Add(time.Hour)},
 	}
-	storedByName := make(map[string]storedDailyBrief, len(briefs))
+	storedByName := make(map[string]dailybrief.StoredBrief, len(briefs))
 	for _, candidate := range briefs {
 		brief := persistedDailyBriefFixture(sourceID, eventID)
-		brief.region = candidate.region
+		brief.Region = candidate.region
 		stored, persistErr := repository.PersistDailyBrief(t.Context(), brief, "brief-worker")
 		if persistErr != nil {
 			t.Fatalf("PersistDailyBrief(%q) error = %v", candidate.name, persistErr)

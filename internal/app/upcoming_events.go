@@ -2,24 +2,17 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
-	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 )
 
-type upcomingEventsQuery struct {
-	region      calendar.Region
-	windowStart time.Time
-	windowEnd   time.Time
-	limit       int
-}
+type upcomingEventsQuery = regionWindowQuery
 
 type upcomingEventsRepository interface {
-	UpcomingEvents(context.Context, calendar.Region, time.Time, time.Time, int) ([]calendarpostgres.StoredEvent, error)
+	UpcomingEvents(context.Context, calendar.Region, time.Time, time.Time, int) ([]calendar.StoredEvent, error)
 }
 
 type upcomingEventOutput struct {
@@ -56,15 +49,10 @@ func runUpcomingEvents(
 		output = append(output, newUpcomingEventOutput(event))
 	}
 
-	encoder := json.NewEncoder(stdout)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(output); err != nil {
-		return fmt.Errorf("encode upcoming economic events: %w", err)
-	}
-	return nil
+	return encodeCommandJSON(stdout, "upcoming economic events", output)
 }
 
-func newUpcomingEventOutput(event calendarpostgres.StoredEvent) upcomingEventOutput {
+func newUpcomingEventOutput(event calendar.StoredEvent) upcomingEventOutput {
 	return upcomingEventOutput{
 		ID:              event.ID,
 		Source:          event.Source,

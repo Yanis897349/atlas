@@ -1,4 +1,4 @@
-package app
+package openai
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
 const (
@@ -24,32 +26,33 @@ const (
 	maxOpenAIOutputTokens          = 4096
 )
 
-// OpenAIHTTPClient executes OpenAI Responses API requests.
-type OpenAIHTTPClient interface {
+// HTTPClient executes OpenAI Responses API requests.
+type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-type openAIDailyBriefGeneratorConfig struct {
+// Config configures a Responses API daily-brief generator.
+type Config struct {
 	APIKey        string
 	Model         string
-	Client        OpenAIHTTPClient
+	Client        HTTPClient
 	Endpoint      string
 	RequestBudget time.Duration
 }
 
-type openAIDailyBriefGenerator struct {
+// Generator creates daily-brief drafts through the OpenAI Responses API.
+type Generator struct {
 	apiKey        string
 	model         string
-	client        OpenAIHTTPClient
+	client        HTTPClient
 	endpoint      string
 	requestBudget time.Duration
 }
 
-var _ dailyBriefGenerator = (*openAIDailyBriefGenerator)(nil)
+var _ dailybrief.Generator = (*Generator)(nil)
 
-func newOpenAIDailyBriefGenerator(
-	config openAIDailyBriefGeneratorConfig,
-) (*openAIDailyBriefGenerator, error) {
+// NewGenerator returns a validated OpenAI daily-brief generator.
+func NewGenerator(config Config) (*Generator, error) {
 	apiKey := strings.TrimSpace(config.APIKey)
 	if apiKey == "" {
 		return nil, errors.New("OpenAI API key is required")
@@ -92,7 +95,7 @@ func newOpenAIDailyBriefGenerator(
 		}
 	}
 
-	return &openAIDailyBriefGenerator{
+	return &Generator{
 		apiKey:        apiKey,
 		model:         model,
 		client:        client,
@@ -101,16 +104,16 @@ func newOpenAIDailyBriefGenerator(
 	}, nil
 }
 
-func (generator *openAIDailyBriefGenerator) Generate(
+func (generator *Generator) Generate(
 	ctx context.Context,
-	input dailyBriefInput,
-) (dailyBriefGeneration, error) {
+	input dailybrief.Input,
+) (dailybrief.Generation, error) {
 	requestContext, cancel := context.WithTimeout(ctx, generator.requestBudget)
 	defer cancel()
 
 	requestBody, err := newOpenAIDailyBriefRequest(requestContext, generator.model, input)
 	if err != nil {
-		return dailyBriefGeneration{}, fmt.Errorf("encode OpenAI daily brief request: %w", err)
+		return dailybrief.Generation{}, fmt.Errorf("encode OpenAI daily brief request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(
@@ -120,7 +123,7 @@ func (generator *openAIDailyBriefGenerator) Generate(
 		bytes.NewReader(requestBody),
 	)
 	if err != nil {
-		return dailyBriefGeneration{}, fmt.Errorf("create OpenAI Responses API request: %w", err)
+		return dailybrief.Generation{}, fmt.Errorf("create OpenAI Responses API request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Authorization", "Bearer "+generator.apiKey)
@@ -128,29 +131,29 @@ func (generator *openAIDailyBriefGenerator) Generate(
 
 	response, err := generator.client.Do(request)
 	if err != nil {
-		return dailyBriefGeneration{}, fmt.Errorf("send OpenAI Responses API request: %w", err)
+		return dailybrief.Generation{}, fmt.Errorf("send OpenAI Responses API request: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxOpenAIResponseBytes+1))
 	if err != nil {
-		return dailyBriefGeneration{}, fmt.Errorf("read OpenAI Responses API response: %w", err)
+		return dailybrief.Generation{}, fmt.Errorf("read OpenAI Responses API response: %w", err)
 	}
 	if len(responseBody) > maxOpenAIResponseBytes {
-		return dailyBriefGeneration{}, fmt.Errorf(
+		return dailybrief.Generation{}, fmt.Errorf(
 			"read OpenAI Responses API response: body exceeds %d bytes",
 			maxOpenAIResponseBytes,
 		)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return dailyBriefGeneration{}, openAIProviderError(response.StatusCode, responseBody)
+		return dailybrief.Generation{}, openAIProviderError(response.StatusCode, responseBody)
 	}
 
 	draft, err := decodeOpenAIDailyBriefResponse(responseBody)
 	if err != nil {
-		return dailyBriefGeneration{}, fmt.Errorf("decode OpenAI Responses API response: %w", err)
+		return dailybrief.Generation{}, fmt.Errorf("decode OpenAI Responses API response: %w", err)
 	}
-	return dailyBriefGeneration{provider: "openai", model: generator.model, draft: draft}, nil
+	return dailybrief.Generation{Provider: "openai", Model: generator.model, Draft: draft}, nil
 }
 
 func isLoopbackHost(host string) bool {

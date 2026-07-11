@@ -19,25 +19,12 @@ type DB interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-// MaxUpcomingEventsLimit bounds one upcoming-event retrieval.
-const MaxUpcomingEventsLimit = 100
-
 // Repository persists normalized economic events.
 type Repository struct {
 	db DB
 }
 
 var _ calendar.Repository = (*Repository)(nil)
-
-// StoredEvent is a normalized economic event with its persistence metadata.
-type StoredEvent struct {
-	ID string
-	calendar.Event
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	CreatedBy string
-	UpdatedBy string
-}
 
 // NewRepository returns an economic-event repository backed by db.
 func NewRepository(db DB) (*Repository, error) {
@@ -60,12 +47,12 @@ func (repository *Repository) UpsertEvent(
 	ctx context.Context,
 	event calendar.Event,
 	actor string,
-) (StoredEvent, error) {
+) (calendar.StoredEvent, error) {
 	actor = strings.TrimSpace(actor)
 	event.Source = strings.TrimSpace(event.Source)
 	event.ExternalEventID = strings.TrimSpace(event.ExternalEventID)
 	if err := validateEvent(event, actor); err != nil {
-		return StoredEvent{}, err
+		return calendar.StoredEvent{}, err
 	}
 
 	event.ScheduledAt = event.ScheduledAt.UTC()
@@ -88,7 +75,7 @@ func (repository *Repository) UpsertEvent(
 		return stored, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return StoredEvent{}, fmt.Errorf("upsert economic event: %w", err)
+		return calendar.StoredEvent{}, fmt.Errorf("upsert economic event: %w", err)
 	}
 
 	stored, err = scanEvent(repository.db.QueryRow(
@@ -98,7 +85,7 @@ func (repository *Repository) UpsertEvent(
 		event.ExternalEventID,
 	))
 	if err != nil {
-		return StoredEvent{}, fmt.Errorf("load unchanged economic event: %w", err)
+		return calendar.StoredEvent{}, fmt.Errorf("load unchanged economic event: %w", err)
 	}
 
 	return stored, nil
@@ -111,7 +98,7 @@ func (repository *Repository) UpcomingEvents(
 	windowStart time.Time,
 	windowEnd time.Time,
 	limit int,
-) ([]StoredEvent, error) {
+) ([]calendar.StoredEvent, error) {
 	if err := validateUpcomingEventsQuery(region, windowStart, windowEnd, limit); err != nil {
 		return nil, err
 	}
@@ -129,7 +116,7 @@ func (repository *Repository) UpcomingEvents(
 	}
 	defer rows.Close()
 
-	events := make([]StoredEvent, 0, limit)
+	events := make([]calendar.StoredEvent, 0, limit)
 	for rows.Next() {
 		event, scanErr := scanEvent(rows)
 		if scanErr != nil {
@@ -144,8 +131,8 @@ func (repository *Repository) UpcomingEvents(
 	return events, nil
 }
 
-func scanEvent(row pgx.Row) (StoredEvent, error) {
-	var event StoredEvent
+func scanEvent(row pgx.Row) (calendar.StoredEvent, error) {
+	var event calendar.StoredEvent
 	err := row.Scan(
 		&event.ID,
 		&event.Source,
@@ -218,8 +205,8 @@ func validateUpcomingEventsQuery(
 	if windowEnd.Before(windowStart) {
 		return errors.New("window end must not be before window start")
 	}
-	if limit < 1 || limit > MaxUpcomingEventsLimit {
-		return fmt.Errorf("limit must be between 1 and %d", MaxUpcomingEventsLimit)
+	if limit < 1 || limit > calendar.MaxUpcomingEventsLimit {
+		return fmt.Errorf("limit must be between 1 and %d", calendar.MaxUpcomingEventsLimit)
 	}
 
 	return nil

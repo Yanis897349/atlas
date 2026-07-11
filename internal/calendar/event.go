@@ -11,6 +11,9 @@ const (
 	RegionEurozone     Region = "eurozone"
 )
 
+// MaxUpcomingEventsLimit bounds one upcoming-event retrieval.
+const MaxUpcomingEventsLimit = 100
+
 // EventType classifies an economic event by the indicator or decision it represents.
 type EventType string
 
@@ -33,4 +36,14 @@ type Event struct {
 	ScheduledAt     time.Time
 	SourceURL       string
 	RetrievedAt     time.Time
+}
+
+// StoredEvent is a normalized economic event with its persistence metadata.
+type StoredEvent struct {
+	ID string
+	Event
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	CreatedBy string
+	UpdatedBy string
 }

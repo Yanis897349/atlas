@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
 func TestParseStoredDailyBriefsQuery(t *testing.T) {
@@ -76,7 +77,7 @@ func TestRunRejectsInvalidStoredDailyBriefsArgumentsBeforeDatabaseSetup(t *testi
 
 func TestRunStoredDailyBriefsWritesCompleteJSON(t *testing.T) {
 	brief := storedDailyBriefOutputFixture()
-	repository := &storedDailyBriefsReaderStub{briefs: []storedDailyBrief{brief}}
+	repository := &storedDailyBriefsReaderStub{briefs: []dailybrief.StoredBrief{brief}}
 	stdout := &bytes.Buffer{}
 	query := validStoredDailyBriefsQuery()
 
@@ -99,8 +100,8 @@ func TestRunStoredDailyBriefsWritesCompleteJSON(t *testing.T) {
 		t.Fatalf("output = %#v, want complete stored brief", output)
 	}
 	if output[0].Sections[0].Heading != "First & foremost" ||
-		output[0].Sections[0].Citations[0].Kind != dailyBriefCitationUpcomingEvent ||
-		output[0].Sections[0].Citations[1].Kind != dailyBriefCitationSourceRecord {
+		output[0].Sections[0].Citations[0].Kind != dailybrief.CitationUpcomingEvent ||
+		output[0].Sections[0].Citations[1].Kind != dailybrief.CitationSourceRecord {
 		t.Errorf("ordered sections and citations = %#v, want stored order", output[0].Sections)
 	}
 	if !strings.Contains(stdout.String(), "First & foremost") || !strings.HasSuffix(output[0].CreatedAt, "Z") ||
@@ -123,7 +124,7 @@ func TestRunStoredDailyBriefsPreservesFailures(t *testing.T) {
 	repositoryErr := errors.New("briefs unavailable")
 	for _, test := range []struct {
 		name       string
-		repository storedDailyBriefsReader
+		repository dailybrief.Reader
 		stdout     *errorWriter
 		wantErr    error
 		contains   string
@@ -164,25 +165,38 @@ func validStoredDailyBriefsQuery() storedDailyBriefsQuery {
 	}
 }
 
-func storedDailyBriefOutputFixture() storedDailyBrief {
-	brief := persistedDailyBriefFixture(
-		"00000000-0000-0000-0000-000000000001",
-		"00000000-0000-0000-0000-000000000002",
-	)
-	brief.sections[0].heading = "First & foremost"
+func storedDailyBriefOutputFixture() dailybrief.StoredBrief {
+	brief := dailybrief.Brief{
+		Region:                 calendar.RegionUnitedStates,
+		PublicationWindowStart: time.Date(2026, time.July, 11, 8, 0, 0, 0, time.UTC),
+		PublicationWindowEnd:   time.Date(2026, time.July, 11, 12, 0, 0, 0, time.UTC),
+		EventWindowStart:       time.Date(2026, time.July, 12, 8, 0, 0, 0, time.UTC),
+		EventWindowEnd:         time.Date(2026, time.July, 13, 8, 0, 0, 0, time.UTC),
+		Provider:               "openai",
+		Model:                  "test-model",
+		Sections: []dailybrief.Section{
+			{Heading: "First & foremost", Content: "First section", Citations: []dailybrief.Citation{
+				{Kind: dailybrief.CitationUpcomingEvent, ID: "00000000-0000-0000-0000-000000000002", Source: "official-calendar", URL: "https://example.com/event"},
+				{Kind: dailybrief.CitationSourceRecord, ID: "00000000-0000-0000-0000-000000000001", Source: "example-news", URL: "https://example.com/news"},
+			}},
+			{Heading: "Second", Content: "Second section", Citations: []dailybrief.Citation{
+				{Kind: dailybrief.CitationSourceRecord, ID: "00000000-0000-0000-0000-000000000001", Source: "example-news", URL: "https://example.com/news"},
+			}},
+		},
+	}
 	createdAt := time.Date(2026, time.July, 11, 14, 0, 0, 0, time.FixedZone("CEST", 2*60*60))
-	return storedDailyBrief{
-		ID:         "00000000-0000-0000-0000-000000000003",
-		dailyBrief: brief,
-		CreatedAt:  createdAt,
-		UpdatedAt:  createdAt,
-		CreatedBy:  "brief-worker",
-		UpdatedBy:  "brief-worker",
+	return dailybrief.StoredBrief{
+		ID:        "00000000-0000-0000-0000-000000000003",
+		Brief:     brief,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+		CreatedBy: "brief-worker",
+		UpdatedBy: "brief-worker",
 	}
 }
 
 type storedDailyBriefsReaderStub struct {
-	briefs      []storedDailyBrief
+	briefs      []dailybrief.StoredBrief
 	err         error
 	calls       int
 	region      calendar.Region
@@ -197,7 +211,7 @@ func (repository *storedDailyBriefsReaderStub) StoredDailyBriefs(
 	windowStart time.Time,
 	windowEnd time.Time,
 	limit int,
-) ([]storedDailyBrief, error) {
+) ([]dailybrief.StoredBrief, error) {
 	repository.calls++
 	repository.region = region
 	repository.windowStart = windowStart

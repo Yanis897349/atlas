@@ -2,12 +2,12 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
-	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
+	"github.com/Yanis897349/atlas/internal/ingestion"
 )
 
 type dailyBriefWindowOutput struct {
@@ -35,45 +35,40 @@ type dailyBriefInputOutput struct {
 
 func runDailyBriefInput(
 	ctx context.Context,
-	sourceRecords recentSourceRecordsRepository,
-	events dailyBriefEventsRepository,
+	sourceRecords dailybrief.SourceRecords,
+	events dailybrief.Events,
 	stdout io.Writer,
-	query dailyBriefInputQuery,
+	query dailybrief.InputQuery,
 ) error {
-	input, err := assembleDailyBriefInput(ctx, sourceRecords, events, query)
+	input, err := dailybrief.AssembleInput(ctx, sourceRecords, events, query)
 	if err != nil {
 		return fmt.Errorf("assemble daily brief input: %w", err)
 	}
 
 	output := dailyBriefInputOutput{
-		Region: input.region,
+		Region: input.Region,
 		PublicationWindow: dailyBriefWindowOutput{
-			From: formatOutputTime(input.publicationWindowStart),
-			To:   formatOutputTime(input.publicationWindowEnd),
+			From: formatOutputTime(input.PublicationWindowStart),
+			To:   formatOutputTime(input.PublicationWindowEnd),
 		},
 		EventWindow: dailyBriefWindowOutput{
-			From: formatOutputTime(input.eventWindowStart),
-			To:   formatOutputTime(input.eventWindowEnd),
+			From: formatOutputTime(input.EventWindowStart),
+			To:   formatOutputTime(input.EventWindowEnd),
 		},
-		SourceRecords:  make([]dailyBriefSourceRecordOutput, 0, len(input.sourceRecords)),
-		UpcomingEvents: make([]upcomingEventOutput, 0, len(input.upcomingEvents)),
+		SourceRecords:  make([]dailyBriefSourceRecordOutput, 0, len(input.SourceRecords)),
+		UpcomingEvents: make([]upcomingEventOutput, 0, len(input.UpcomingEvents)),
 	}
-	for _, record := range input.sourceRecords {
+	for _, record := range input.SourceRecords {
 		output.SourceRecords = append(output.SourceRecords, newDailyBriefSourceRecordOutput(record))
 	}
-	for _, event := range input.upcomingEvents {
+	for _, event := range input.UpcomingEvents {
 		output.UpcomingEvents = append(output.UpcomingEvents, newUpcomingEventOutput(event))
 	}
 
-	encoder := json.NewEncoder(stdout)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(output); err != nil {
-		return fmt.Errorf("encode daily brief input: %w", err)
-	}
-	return nil
+	return encodeCommandJSON(stdout, "daily brief input", output)
 }
 
-func newDailyBriefSourceRecordOutput(record ingestionpostgres.StoredSourceRecord) dailyBriefSourceRecordOutput {
+func newDailyBriefSourceRecordOutput(record ingestion.StoredSourceRecord) dailyBriefSourceRecordOutput {
 	return dailyBriefSourceRecordOutput{
 		ID:           record.ID,
 		Source:       record.Source,

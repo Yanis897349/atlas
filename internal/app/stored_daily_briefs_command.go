@@ -2,28 +2,17 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"time"
 
-	"github.com/Yanis897349/atlas/internal/calendar"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
-type storedDailyBriefsQuery struct {
-	region      calendar.Region
-	windowStart time.Time
-	windowEnd   time.Time
-	limit       int
-}
-
-type storedDailyBriefsReader interface {
-	StoredDailyBriefs(context.Context, calendar.Region, time.Time, time.Time, int) ([]storedDailyBrief, error)
-}
+type storedDailyBriefsQuery = regionWindowQuery
 
 func runStoredDailyBriefs(
 	ctx context.Context,
-	repository storedDailyBriefsReader,
+	repository dailybrief.Reader,
 	stdout io.Writer,
 	query storedDailyBriefsQuery,
 ) error {
@@ -43,10 +32,5 @@ func runStoredDailyBriefs(
 		output = append(output, newDailyBriefOutput(brief))
 	}
 
-	encoder := json.NewEncoder(stdout)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(output); err != nil {
-		return fmt.Errorf("encode stored daily briefs: %w", err)
-	}
-	return nil
+	return encodeCommandJSON(stdout, "stored daily briefs", output)
 }

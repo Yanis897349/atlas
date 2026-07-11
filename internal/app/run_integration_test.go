@@ -125,7 +125,7 @@ func TestRunListsUpcomingEventsEndToEnd(t *testing.T) {
 		commandEvent("after", calendar.RegionUnitedStates, windowEnd.Add(time.Microsecond)),
 		commandEvent("other-region", calendar.RegionEurozone, windowStart.Add(time.Hour)),
 	}
-	storedByExternalID := make(map[string]calendarpostgres.StoredEvent, len(events))
+	storedByExternalID := make(map[string]calendar.StoredEvent, len(events))
 	for _, event := range events {
 		stored, persistErr := repository.UpsertEvent(t.Context(), event, "calendar-ingestion")
 		if persistErr != nil {

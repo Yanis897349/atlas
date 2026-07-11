@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
-	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 )
 
 func TestParseUpcomingEventsQuery(t *testing.T) {
@@ -78,7 +77,7 @@ func TestRunRejectsInvalidUpcomingEventsArgumentsBeforeDatabaseSetup(t *testing.
 func TestRunUpcomingEventsWritesDomainJSON(t *testing.T) {
 	scheduledAt := time.Date(2026, time.August, 1, 10, 30, 0, 123000000, time.FixedZone("CEST", 2*60*60))
 	retrievedAt := time.Date(2026, time.July, 11, 9, 0, 0, 0, time.FixedZone("CEST", 2*60*60))
-	repository := &upcomingEventsStub{events: []calendarpostgres.StoredEvent{
+	repository := &upcomingEventsStub{events: []calendar.StoredEvent{
 		{
 			ID: "first-id",
 			Event: calendar.Event{
@@ -168,7 +167,7 @@ func TestRunUpcomingEventsReportsWriterFailure(t *testing.T) {
 }
 
 type upcomingEventsStub struct {
-	events []calendarpostgres.StoredEvent
+	events []calendar.StoredEvent
 	err    error
 	calls  int
 	query  upcomingEventsQuery
@@ -180,7 +179,7 @@ func (repository *upcomingEventsStub) UpcomingEvents(
 	windowStart time.Time,
 	windowEnd time.Time,
 	limit int,
-) ([]calendarpostgres.StoredEvent, error) {
+) ([]calendar.StoredEvent, error) {
 	repository.calls++
 	repository.query = upcomingEventsQuery{region: region, windowStart: windowStart, windowEnd: windowEnd, limit: limit}
 	return repository.events, repository.err

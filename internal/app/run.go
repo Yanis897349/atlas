@@ -10,6 +10,9 @@ import (
 
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/Yanis897349/atlas/internal/calendar/sourcehttp"
+	"github.com/Yanis897349/atlas/internal/dailybrief"
+	dailybriefopenai "github.com/Yanis897349/atlas/internal/dailybrief/openai"
+	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
@@ -23,6 +26,9 @@ type CalendarSourceDependencies struct {
 	Now           func() time.Time
 	RequestBudget time.Duration
 }
+
+// OpenAIHTTPClient executes OpenAI Responses API requests.
+type OpenAIHTTPClient = dailybriefopenai.HTTPClient
 
 // Dependencies contains process-bound dependencies and deterministic test seams.
 type Dependencies struct {
@@ -59,7 +65,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return fmt.Errorf("configure PostgreSQL: %w", err)
 	}
 
-	var dailyBriefGenerator dailyBriefGenerator
+	var dailyBriefGenerator dailybrief.Generator
 	if parsedCommand.name == "daily-brief" {
 		dailyBriefGenerator, err = configureOpenAIDailyBriefGenerator(getenv, dependencies)
 		if err != nil {
@@ -129,7 +135,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		if err != nil {
 			return fmt.Errorf("configure economic event repository: %w", err)
 		}
-		briefRepository, err := newDailyBriefRepository(pool)
+		briefRepository, err := dailybriefpostgres.NewRepository(pool)
 		if err != nil {
 			return fmt.Errorf("configure daily brief repository: %w", err)
 		}
@@ -143,7 +149,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			parsedCommand.dailyBriefInputQuery,
 		)
 	case "daily-briefs":
-		briefRepository, err := newDailyBriefRepository(pool)
+		briefRepository, err := dailybriefpostgres.NewRepository(pool)
 		if err != nil {
 			return fmt.Errorf("configure daily brief repository: %w", err)
 		}

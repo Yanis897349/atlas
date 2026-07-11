@@ -157,7 +157,7 @@ func TestRepositoryUpcomingEventsFiltersOrdersAndLimits(t *testing.T) {
 		newEvent("other-region", calendar.RegionEurozone, windowStart.Add(time.Hour)),
 	}
 
-	storedByExternalID := make(map[string]calendarpostgres.StoredEvent, len(events))
+	storedByExternalID := make(map[string]calendar.StoredEvent, len(events))
 	for _, event := range events {
 		stored, upsertErr := repository.UpsertEvent(t.Context(), event, "calendar-ingestion")
 		if upsertErr != nil {
@@ -225,7 +225,7 @@ func TestRepositoryValidatesUpcomingEventsQuery(t *testing.T) {
 		{name: "reversed window", region: calendar.RegionUnitedStates, windowStart: windowEnd, windowEnd: windowStart, limit: 1},
 		{name: "zero limit", region: calendar.RegionUnitedStates, windowStart: windowStart, windowEnd: windowEnd, limit: 0},
 		{name: "negative limit", region: calendar.RegionUnitedStates, windowStart: windowStart, windowEnd: windowEnd, limit: -1},
-		{name: "limit above maximum", region: calendar.RegionUnitedStates, windowStart: windowStart, windowEnd: windowEnd, limit: calendarpostgres.MaxUpcomingEventsLimit + 1},
+		{name: "limit above maximum", region: calendar.RegionUnitedStates, windowStart: windowStart, windowEnd: windowEnd, limit: calendar.MaxUpcomingEventsLimit + 1},
 	}
 
 	for _, test := range tests {

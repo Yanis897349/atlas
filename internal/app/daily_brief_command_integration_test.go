@@ -40,7 +40,7 @@ func TestRunReadsDailyBriefInputEndToEnd(t *testing.T) {
 		commandSourceRecord("end", publicationEnd),
 		commandSourceRecord("after", publicationEnd.Add(time.Microsecond)),
 	}
-	storedRecords := make(map[string]ingestionpostgres.StoredSourceRecord, len(records))
+	storedRecords := make(map[string]ingestion.StoredSourceRecord, len(records))
 	for _, record := range records {
 		stored, persistErr := sourceRepository.UpsertSourceRecord(t.Context(), record, "rss-ingestion")
 		if persistErr != nil {
@@ -60,7 +60,7 @@ func TestRunReadsDailyBriefInputEndToEnd(t *testing.T) {
 		commandEvent("after", calendar.RegionUnitedStates, eventEnd.Add(time.Microsecond)),
 		commandEvent("other-region", calendar.RegionEurozone, eventStart.Add(time.Hour)),
 	}
-	storedEvents := make(map[string]calendarpostgres.StoredEvent, len(events))
+	storedEvents := make(map[string]calendar.StoredEvent, len(events))
 	for _, event := range events {
 		stored, persistErr := eventRepository.UpsertEvent(t.Context(), event, "calendar-ingestion")
 		if persistErr != nil {

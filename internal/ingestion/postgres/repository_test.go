@@ -101,7 +101,7 @@ func TestRepositoryUpsertSourceRecordHandlesConcurrentRetries(t *testing.T) {
 	}
 
 	const retries = 8
-	results := make(chan ingestionpostgres.StoredSourceRecord, retries)
+	results := make(chan ingestion.StoredSourceRecord, retries)
 	errors := make(chan error, retries)
 	var waitGroup sync.WaitGroup
 	for range retries {
@@ -188,7 +188,7 @@ func TestRepositoryRecentSourceRecordsFiltersOrdersAndLimits(t *testing.T) {
 		newSourceRecord("after", windowEnd.Add(time.Microsecond)),
 	}
 
-	storedBySourceItemID := make(map[string]ingestionpostgres.StoredSourceRecord, len(records))
+	storedBySourceItemID := make(map[string]ingestion.StoredSourceRecord, len(records))
 	for _, record := range records {
 		stored, upsertErr := repository.UpsertSourceRecord(t.Context(), record, "rss-ingestion")
 		if upsertErr != nil {
@@ -254,7 +254,7 @@ func TestRepositoryValidatesRecentSourceRecordsQuery(t *testing.T) {
 		{name: "reversed window", windowStart: windowEnd, windowEnd: windowStart, limit: 1},
 		{name: "zero limit", windowStart: windowStart, windowEnd: windowEnd, limit: 0},
 		{name: "negative limit", windowStart: windowStart, windowEnd: windowEnd, limit: -1},
-		{name: "limit above maximum", windowStart: windowStart, windowEnd: windowEnd, limit: ingestionpostgres.MaxRecentSourceRecordsLimit + 1},
+		{name: "limit above maximum", windowStart: windowStart, windowEnd: windowEnd, limit: ingestion.MaxRecentSourceRecordsLimit + 1},
 	}
 
 	for _, test := range tests {
