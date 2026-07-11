@@ -146,4 +146,35 @@ WHERE watchlist_id = $1 AND created_by = 'editor' AND updated_by = 'editor'
 	if auditedInstruments != 2 {
 		t.Errorf("audited replacement instrument count = %d, want 2", auditedInstruments)
 	}
+
+	stdout.Reset()
+	if err := Run(t.Context(), []string{"delete-watchlist", "--id", first.ID}, dependencies); err != nil {
+		t.Fatalf("Run(delete-watchlist) error = %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("deleted watchlist stdout = %q, want no output", stdout.String())
+	}
+	if err := Run(t.Context(), []string{"watchlist", "--id", first.ID}, dependencies); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("Run(watchlist after delete) error = %v, want pgx.ErrNoRows", err)
+	}
+	var remainingInstruments int
+	if err := database.Pool.QueryRow(t.Context(), `
+SELECT count(*) FROM watchlist_instruments WHERE watchlist_id = $1
+`, first.ID).Scan(&remainingInstruments); err != nil {
+		t.Fatalf("count instruments after command deletion: %v", err)
+	}
+	if remainingInstruments != 0 {
+		t.Errorf("instrument count after command deletion = %d, want 0", remainingInstruments)
+	}
+
+	stdout.Reset()
+	err = Run(t.Context(), []string{
+		"delete-watchlist", "--id", "00000000-0000-0000-0000-000000000000",
+	}, dependencies)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("Run(delete-watchlist missing) error = %v, want pgx.ErrNoRows", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("missing deletion stdout = %q, want no output", stdout.String())
+	}
 }

@@ -13,7 +13,7 @@ import (
 	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|watchlist|watchlists>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists>"
 
 type command struct {
 	name                     string
@@ -23,6 +23,7 @@ type command struct {
 	storedDailyBriefsQuery   storedDailyBriefsQuery
 	createWatchlistCommand   createWatchlistCommand
 	updateWatchlistCommand   updateWatchlistCommand
+	deleteWatchlistCommand   deleteWatchlistCommand
 	watchlistQuery           watchlistQuery
 	watchlistsQuery          watchlistsQuery
 }
@@ -74,6 +75,12 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], updateWatchlistCommand: updateCommand}, nil
+	case "delete-watchlist":
+		deleteCommand, err := parseDeleteWatchlistCommand(arguments[1:])
+		if err != nil {
+			return command{}, err
+		}
+		return command{name: arguments[0], deleteWatchlistCommand: deleteCommand}, nil
 	case "watchlist":
 		query, err := parseWatchlistQuery(arguments[1:])
 		if err != nil {

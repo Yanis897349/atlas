@@ -222,6 +222,8 @@ mise exec -- go run ./cmd/atlas update-watchlist \
   --actor editor \
   --symbol DXY \
   --symbol BRK.B
+mise exec -- go run ./cmd/atlas delete-watchlist \
+  --id 00000000-0000-0000-0000-000000000001
 mise exec -- go run ./cmd/atlas watchlist --id 00000000-0000-0000-0000-000000000001
 mise exec -- go run ./cmd/atlas watchlists --limit 25
 ```
@@ -240,6 +242,8 @@ mise exec -- go run ./cmd/atlas watchlists --limit 25
 
 `update-watchlist` atomically replaces one persisted watchlist definition by UUID. It applies the same name, actor, and ordered-symbol validation and normalization as creation, preserves the original creation metadata, updates the modification audit metadata, and emits the complete updated definition as JSON. A valid UUID that does not exist returns a not-found error without emitting JSON; partial definition updates are not supported.
 
+`delete-watchlist` atomically deletes one persisted watchlist definition by UUID, including its instruments. Invalid UUIDs are rejected before database setup, successful deletion emits no output, and a valid UUID that does not exist returns a not-found error without output.
+
 `watchlist` reads one persisted watchlist definition by UUID and emits its complete definition, ordered symbols, and audit metadata as JSON. Invalid UUIDs are rejected before database setup, and a valid UUID that does not exist returns a not-found error without emitting JSON; the command never modifies the stored definition.
 
-`watchlists` reads up to 100 persisted watchlist definitions. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each definition's ordered symbols and audit metadata; an empty result is emitted as `[]`. Deletion, personalization, event linkage, market data, scheduling, HTTP delivery, and UI presentation remain deferred.
+`watchlists` reads up to 100 persisted watchlist definitions. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each definition's ordered symbols and audit metadata; an empty result is emitted as `[]`. Personalization, event linkage, market data, scheduling, HTTP delivery, and UI presentation remain deferred.

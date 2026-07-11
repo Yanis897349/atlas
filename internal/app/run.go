@@ -172,6 +172,12 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			return fmt.Errorf("configure watchlist repository: %w", err)
 		}
 		return runUpdateWatchlist(ctx, repository, stdout, parsedCommand.updateWatchlistCommand)
+	case "delete-watchlist":
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runDeleteWatchlist(ctx, repository, parsedCommand.deleteWatchlistCommand)
 	case "watchlist":
 		repository, err := watchlistpostgres.NewRepository(pool)
 		if err != nil {

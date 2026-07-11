@@ -132,28 +132,36 @@ func parseWatchlistsQuery(arguments []string) (watchlistsQuery, error) {
 }
 
 func parseWatchlistQuery(arguments []string) (watchlistQuery, error) {
-	flags := flag.NewFlagSet("watchlist", flag.ContinueOnError)
+	id, err := parseRequiredWatchlistID("watchlist", watchlistUsage, arguments)
+	if err != nil {
+		return watchlistQuery{}, err
+	}
+	return watchlistQuery{id: id}, nil
+}
+
+func parseRequiredWatchlistID(commandName, usage string, arguments []string) (string, error) {
+	flags := flag.NewFlagSet(commandName, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var id singleString
 	flags.Var(&id, "id", "watchlist UUID")
 	if err := flags.Parse(arguments); err != nil {
-		return watchlistQuery{}, invalidWatchlistArguments("watchlist", watchlistUsage, err)
+		return "", invalidWatchlistArguments(commandName, usage, err)
 	}
 	if flags.NArg() != 0 {
-		return watchlistQuery{}, invalidWatchlistArguments(
-			"watchlist", watchlistUsage, fmt.Errorf("unexpected positional arguments"),
+		return "", invalidWatchlistArguments(
+			commandName, usage, fmt.Errorf("unexpected positional arguments"),
 		)
 	}
 	if !id.provided {
-		return watchlistQuery{}, invalidWatchlistArguments("watchlist", watchlistUsage, fmt.Errorf("--id is required"))
+		return "", invalidWatchlistArguments(commandName, usage, fmt.Errorf("--id is required"))
 	}
 
 	if !validWatchlistID(id.value) {
-		return watchlistQuery{}, invalidWatchlistArguments(
-			"watchlist", watchlistUsage, fmt.Errorf("--id must be a UUID"),
+		return "", invalidWatchlistArguments(
+			commandName, usage, fmt.Errorf("--id must be a UUID"),
 		)
 	}
-	return watchlistQuery{id: id.value}, nil
+	return id.value, nil
 }
 
 func validWatchlistID(id string) bool {

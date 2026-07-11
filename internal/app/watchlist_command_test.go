@@ -258,6 +258,7 @@ type watchlistRepositoryStub struct {
 	limit       int
 	createCalls int
 	updateCalls int
+	deleteCalls int
 	lookupCalls int
 	listCalls   int
 }
@@ -302,6 +303,7 @@ func (repository *watchlistRepositoryStub) UpdateWatchlist(
 }
 
 func (repository *watchlistRepositoryStub) DeleteWatchlist(_ context.Context, id string) error {
+	repository.deleteCalls++
 	repository.id = id
 	return repository.err
 }
