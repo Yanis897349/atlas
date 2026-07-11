@@ -15,8 +15,12 @@ import (
 
 // DB is the PostgreSQL operation used by Repository.
 type DB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
+
+// MaxRecentSourceRecordsLimit bounds one recent-source-record retrieval.
+const MaxRecentSourceRecordsLimit = 100
 
 // Repository persists normalized source records.
 type Repository struct {
@@ -94,6 +98,44 @@ func (repository *Repository) PersistSourceRecord(ctx context.Context, record in
 	return err
 }
 
+// RecentSourceRecords returns records published within the inclusive time window.
+func (repository *Repository) RecentSourceRecords(
+	ctx context.Context,
+	windowStart time.Time,
+	windowEnd time.Time,
+	limit int,
+) ([]StoredSourceRecord, error) {
+	if err := validateRecentSourceRecordsQuery(windowStart, windowEnd, limit); err != nil {
+		return nil, err
+	}
+
+	rows, err := repository.db.Query(
+		ctx,
+		recentSourceRecordsSQL,
+		windowStart.UTC(),
+		windowEnd.UTC(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recent source records: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]StoredSourceRecord, 0, limit)
+	for rows.Next() {
+		record, scanErr := scanSourceRecord(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("scan recent source record: %w", scanErr)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recent source records: %w", err)
+	}
+
+	return records, nil
+}
+
 func scanSourceRecord(row pgx.Row) (StoredSourceRecord, error) {
 	var record StoredSourceRecord
 	err := row.Scan(
@@ -142,6 +184,23 @@ func validateSourceRecord(record ingestion.SourceRecord, actor string) error {
 	return nil
 }
 
+func validateRecentSourceRecordsQuery(windowStart time.Time, windowEnd time.Time, limit int) error {
+	if windowStart.IsZero() {
+		return errors.New("window start is required")
+	}
+	if windowEnd.IsZero() {
+		return errors.New("window end is required")
+	}
+	if windowEnd.Before(windowStart) {
+		return errors.New("window end must not be before window start")
+	}
+	if limit < 1 || limit > MaxRecentSourceRecordsLimit {
+		return fmt.Errorf("limit must be between 1 and %d", MaxRecentSourceRecordsLimit)
+	}
+
+	return nil
+}
+
 const sourceRecordColumns = `
     id::text,
     source,
@@ -181,3 +240,11 @@ const selectSourceRecordSQL = `
 SELECT ` + sourceRecordColumns + `
 FROM source_records
 WHERE source = $1 AND source_item_id = $2`
+
+const recentSourceRecordsSQL = `
+SELECT ` + sourceRecordColumns + `
+FROM source_records
+WHERE published_at >= $1
+  AND published_at <= $2
+ORDER BY published_at DESC, id
+LIMIT $3`

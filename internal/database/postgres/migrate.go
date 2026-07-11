@@ -15,12 +15,16 @@ var sourceRecordsMigration string
 //go:embed migrations/000002_create_economic_events.up.sql
 var economicEventsMigration string
 
+//go:embed migrations/000003_index_source_records_published_at.up.sql
+var sourceRecordsPublishedAtIndexMigration string
+
 var migrations = []struct {
 	version int64
 	query   string
 }{
 	{version: 1, query: sourceRecordsMigration},
 	{version: 2, query: economicEventsMigration},
+	{version: 3, query: sourceRecordsPublishedAtIndexMigration},
 }
 
 // Migrate applies pending database migrations transactionally.
