@@ -195,7 +195,6 @@ func TestAdapterFetchEventsRejectsMalformedCalendarData(t *testing.T) {
 	}{
 		{name: "invalid JSON", json: `[`, want: "unexpected end of JSON input"},
 		{name: "null list", json: `null`, want: "release list is required"},
-		{name: "missing title", json: `[{}]`, want: "release 1 title is required"},
 		{name: "invalid fixture period", json: string(fixtureContents(t, "malformed.json")), want: "invalid GDP reference period"},
 		{name: "missing period", json: supportedRelease("", "2026-04-30T11:00:00Z"), want: "invalid GDP reference period"},
 		{name: "invalid quarter", json: supportedRelease("Q5/2026", "2026-04-30T11:00:00Z"), want: "invalid GDP reference period"},

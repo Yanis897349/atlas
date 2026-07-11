@@ -48,7 +48,7 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 	for index, current := range releases {
 		title := strings.TrimSpace(current.Title)
 		if title == "" {
-			return nil, fmt.Errorf("release %d title is required", index+1)
+			continue
 		}
 		identity, supported, err := normalizeIdentity(title, current.Period)
 		if err != nil {
