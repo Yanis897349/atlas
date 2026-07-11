@@ -24,7 +24,7 @@ func TestDatabaseConfigValidatesAndBoundsPool(t *testing.T) {
 }
 
 func TestRunValidatesCommandBeforeConfiguration(t *testing.T) {
-	tests := [][]string{nil, {"unknown"}, {"migrate", "extra"}}
+	tests := [][]string{nil, {"unknown"}, {"migrate", "extra"}, {"ingest-bea", "extra"}}
 	for _, arguments := range tests {
 		if err := Run(t.Context(), arguments, Dependencies{}); err == nil {
 			t.Errorf("Run(%q) error = nil, want usage error", arguments)
@@ -33,7 +33,7 @@ func TestRunValidatesCommandBeforeConfiguration(t *testing.T) {
 }
 
 func TestRunRecognizesCommandsBeforeRequiringApplicationDatabaseURL(t *testing.T) {
-	for _, command := range []string{"migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb"} {
+	for _, command := range []string{"migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb", "ingest-bea"} {
 		t.Run(command, func(t *testing.T) {
 			err := Run(t.Context(), []string{command}, Dependencies{
 				Getenv: func(string) string { return "" },

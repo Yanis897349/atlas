@@ -12,7 +12,7 @@ import (
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|upcoming-events>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|upcoming-events>"
 
 type command struct {
 	name                string
@@ -25,7 +25,7 @@ func parseCommand(arguments []string) (command, error) {
 	}
 
 	switch arguments[0] {
-	case "migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb":
+	case "migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb", "ingest-bea":
 		if len(arguments) != 1 {
 			return command{}, errors.New(commandUsage)
 		}

@@ -179,6 +179,7 @@ mise exec -- go run ./cmd/atlas ingest-rss
 mise exec -- go run ./cmd/atlas ingest-bls
 mise exec -- go run ./cmd/atlas ingest-fed
 mise exec -- go run ./cmd/atlas ingest-ecb
+mise exec -- go run ./cmd/atlas ingest-bea
 mise exec -- go run ./cmd/atlas upcoming-events \
   --region united_states \
   --from 2026-07-01T00:00:00Z \
@@ -186,6 +187,6 @@ mise exec -- go run ./cmd/atlas upcoming-events \
   --limit 25
 ```
 
-`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, and `ingest-ecb` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, and monetary policy meetings from the official ECB calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
+`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, and `ingest-bea` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, and national GDP estimates from the official BEA release schedule. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
 
 `upcoming-events` reads one supported region (`united_states` or `eurozone`) over an inclusive RFC 3339 time window. Its limit must be from 1 through 100. The command emits a JSON array ordered by scheduled time and event ID, retaining each event's source identity and citation URL; it does not ingest or modify records.

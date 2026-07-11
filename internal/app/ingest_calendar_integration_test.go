@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Yanis897349/atlas/internal/calendar/bea"
 	"github.com/Yanis897349/atlas/internal/calendar/bls"
 	"github.com/Yanis897349/atlas/internal/calendar/ecb"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
@@ -40,6 +41,10 @@ func TestRunIngestsCalendarSourcesIdempotently(t *testing.T) {
 				}
 			}
 			retrievedAt = retrievedAt.Add(time.Hour)
+			if test.correctedBody != "" {
+				server = calendarServer(t, http.StatusOK, test.contentType, test.correctedBody)
+				test.configure(&dependencies, server, func() time.Time { return retrievedAt })
+			}
 			if err := Run(t.Context(), []string{test.command}, dependencies); err != nil {
 				t.Fatalf("Run(%s correction) error = %v", test.command, err)
 			}
@@ -59,18 +64,22 @@ WHERE source = $1
 			}
 
 			var sourceURL string
+			var scheduledAt time.Time
 			var storedRetrievedAt time.Time
 			if err := database.Pool.QueryRow(t.Context(), `
-SELECT source_url, retrieved_at
+SELECT source_url, scheduled_at, retrieved_at
 FROM economic_events
 WHERE source = $1
 ORDER BY external_event_id
 LIMIT 1
-`, test.source).Scan(&sourceURL, &storedRetrievedAt); err != nil {
+`, test.source).Scan(&sourceURL, &scheduledAt, &storedRetrievedAt); err != nil {
 				t.Fatalf("load %s source metadata: %v", test.name, err)
 			}
 			if sourceURL != test.canonicalURL || !storedRetrievedAt.Equal(retrievedAt) {
 				t.Errorf("%s source metadata = (%q, %v), want (%q, %v)", test.name, sourceURL, storedRetrievedAt, test.canonicalURL, retrievedAt)
+			}
+			if !test.correctedScheduledAt.IsZero() && !scheduledAt.Equal(test.correctedScheduledAt) {
+				t.Errorf("%s corrected schedule = %v, want %v", test.name, scheduledAt, test.correctedScheduledAt)
 			}
 			if got, want := stdout.String(), strings.Repeat(test.output, 3); got != want {
 				t.Errorf("stdout = %q, want %q", got, want)
@@ -132,25 +141,67 @@ func TestRunReportsCalendarConfigurationAndRetrievalFailures(t *testing.T) {
 	}
 }
 
+func TestRunReportsCalendarPersistenceFailures(t *testing.T) {
+	for _, test := range calendarCommandTests() {
+		t.Run(test.name, func(t *testing.T) {
+			database := postgrestest.Open(t)
+			server := calendarServer(t, http.StatusOK, test.contentType, test.body)
+			dependencies := Dependencies{Getenv: applicationDatabaseEnv(database.URL)}
+			test.configure(&dependencies, server, nil)
+
+			err := Run(t.Context(), []string{test.command}, dependencies)
+			if err == nil || !strings.Contains(err.Error(), test.persistenceError) {
+				t.Fatalf("Run(%s) error = %v, want error containing %q", test.command, err, test.persistenceError)
+			}
+		})
+	}
+}
+
 type calendarCommandTest struct {
-	name               string
-	command            string
-	source             string
-	actor              string
-	canonicalURL       string
-	contentType        string
-	body               string
-	eventCount         int
-	output             string
-	configurationError string
-	retrievalError     string
-	ingestionError     string
-	configure          func(*Dependencies, *httptest.Server, func() time.Time)
-	setURL             func(*Dependencies, string)
+	name                 string
+	command              string
+	source               string
+	actor                string
+	canonicalURL         string
+	contentType          string
+	body                 string
+	correctedBody        string
+	correctedScheduledAt time.Time
+	eventCount           int
+	output               string
+	configurationError   string
+	retrievalError       string
+	persistenceError     string
+	ingestionError       string
+	configure            func(*Dependencies, *httptest.Server, func() time.Time)
+	setURL               func(*Dependencies, string)
 }
 
 func calendarCommandTests() []calendarCommandTest {
 	return []calendarCommandTest{
+		{
+			name:                 "BEA",
+			command:              "ingest-bea",
+			source:               bea.Source,
+			actor:                beaIngestionActor,
+			canonicalURL:         bea.CalendarURL,
+			contentType:          "text/html",
+			body:                 testBEACalendar,
+			correctedBody:        strings.Replace(testBEACalendar, "February 20", "February 21", 1),
+			correctedScheduledAt: time.Date(2026, time.February, 21, 13, 30, 0, 0, time.UTC),
+			eventCount:           2,
+			output:               "ingested 2 BEA calendar events\n",
+			configurationError:   "configure BEA calendar: invalid BEA calendar URL",
+			retrievalError:       "ingest BEA calendar: fetch economic events: fetch BEA calendar",
+			persistenceError:     "ingest BEA calendar: persist economic event 1: upsert economic event",
+			ingestionError:       "ingest BEA calendar",
+			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
+				dependencies.BEA = calendarSourceDependencies(server, now)
+			},
+			setURL: func(dependencies *Dependencies, url string) {
+				dependencies.BEA.CalendarURL = url
+			},
+		},
 		{
 			name:               "BLS",
 			command:            "ingest-bls",
@@ -163,6 +214,7 @@ func calendarCommandTests() []calendarCommandTest {
 			output:             "ingested 2 BLS calendar events\n",
 			configurationError: "configure BLS calendar: invalid BLS calendar URL",
 			retrievalError:     "ingest BLS calendar: fetch economic events: fetch BLS calendar",
+			persistenceError:   "ingest BLS calendar: persist economic event 1: upsert economic event",
 			ingestionError:     "ingest BLS calendar",
 			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
 				dependencies.BLS = calendarSourceDependencies(server, now)
@@ -183,6 +235,7 @@ func calendarCommandTests() []calendarCommandTest {
 			output:             "ingested 2 Federal Reserve calendar events\n",
 			configurationError: "configure Federal Reserve calendar: invalid Federal Reserve calendar URL",
 			retrievalError:     "ingest Federal Reserve calendar: fetch economic events: fetch Federal Reserve calendar",
+			persistenceError:   "ingest Federal Reserve calendar: persist economic event 1: upsert economic event",
 			ingestionError:     "ingest Federal Reserve calendar",
 			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
 				dependencies.Fed = calendarSourceDependencies(server, now)
@@ -203,6 +256,7 @@ func calendarCommandTests() []calendarCommandTest {
 			output:             "ingested 2 ECB calendar events\n",
 			configurationError: "configure ECB calendar: invalid ECB calendar URL",
 			retrievalError:     "ingest ECB calendar: fetch economic events: fetch ECB calendar",
+			persistenceError:   "ingest ECB calendar: persist economic event 1: upsert economic event",
 			ingestionError:     "ingest ECB calendar",
 			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
 				dependencies.ECB = calendarSourceDependencies(server, now)
@@ -248,6 +302,23 @@ const testBLSCalendar = "BEGIN:VCALENDAR\r\n" +
 	"SUMMARY:Employment Situation\r\n" +
 	"END:VEVENT\r\n" +
 	"END:VCALENDAR\r\n"
+
+const testBEACalendar = `<!doctype html>
+<html lang="en"><body>
+  <table id="release-schedule-table">
+    <thead><tr><th>Year 2026</th><th>Release</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="scheduled-date"><div class="release-date">February 20</div><small>8:30 AM</small></td>
+        <td class="release-title">GDP (Advance Estimate), 4th Quarter and Year 2025</td>
+      </tr>
+      <tr>
+        <td class="scheduled-date"><div class="release-date">March 13</div><small>8:30 AM</small></td>
+        <td class="release-title">GDP (Second Estimate), 4th Quarter and Year 2025</td>
+      </tr>
+    </tbody>
+  </table>
+</body></html>`
 
 const testFedCalendar = `<!doctype html>
 <html lang="en"><body>

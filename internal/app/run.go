@@ -29,6 +29,7 @@ type Dependencies struct {
 	RSSHTTPClient rss.HTTPClient
 	RSSFeedURL    string
 	RSSWait       func(context.Context, time.Duration) error
+	BEA           CalendarSourceDependencies
 	BLS           CalendarSourceDependencies
 	ECB           CalendarSourceDependencies
 	Fed           CalendarSourceDependencies
@@ -79,6 +80,8 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return runFedIngestion(ctx, pool, dependencies, stdout)
 	case "ingest-ecb":
 		return runECBIngestion(ctx, pool, dependencies, stdout)
+	case "ingest-bea":
+		return runBEAIngestion(ctx, pool, dependencies, stdout)
 	case "upcoming-events":
 		repository, err := calendarpostgres.NewRepository(pool)
 		if err != nil {
