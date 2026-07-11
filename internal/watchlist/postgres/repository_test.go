@@ -65,6 +65,70 @@ WHERE created_by = 'watchlist-user' AND updated_by = 'watchlist-user'
 	}
 }
 
+func TestRepositoryUpdatesAndRetrievesWatchlist(t *testing.T) {
+	database := openDatabase(t)
+	repository, _ := NewRepository(database.Pool)
+	created, err := repository.CreateWatchlist(t.Context(), watchlist.Definition{
+		Name: "Original", Symbols: []string{"SPY", "EURUSD"},
+	}, "creator")
+	if err != nil {
+		t.Fatalf("CreateWatchlist() error = %v", err)
+	}
+
+	createdAt := time.Date(2026, time.July, 11, 8, 0, 0, 0, time.UTC)
+	updatedAt := createdAt.Add(time.Hour)
+	if _, err := database.Pool.Exec(t.Context(), `
+UPDATE watchlists SET created_at = $2, updated_at = $3 WHERE id = $1
+`, created.ID, createdAt, updatedAt); err != nil {
+		t.Fatalf("set deterministic audit times: %v", err)
+	}
+	before, err := repository.Watchlist(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("Watchlist() before update error = %v", err)
+	}
+
+	updated, err := repository.UpdateWatchlist(t.Context(), created.ID, watchlist.Definition{
+		Name: "  Updated macro  ", Symbols: []string{" brk.b ", "qqq", " EurUsd "},
+	}, "  editor  ")
+	if err != nil {
+		t.Fatalf("UpdateWatchlist() error = %v", err)
+	}
+	if updated.ID != before.ID || updated.Name != "Updated macro" ||
+		!reflect.DeepEqual(updated.Symbols, []string{"BRK.B", "QQQ", "EURUSD"}) {
+		t.Errorf("UpdateWatchlist() = %#v, want complete normalized replacement", updated)
+	}
+	if !updated.CreatedAt.Equal(before.CreatedAt) || updated.CreatedBy != before.CreatedBy {
+		t.Errorf("creation audit = (%v, %q), want (%v, %q)",
+			updated.CreatedAt, updated.CreatedBy, before.CreatedAt, before.CreatedBy)
+	}
+	if !updated.UpdatedAt.After(before.UpdatedAt) || updated.UpdatedBy != "editor" {
+		t.Errorf("update audit = (%v, %q), want time after %v and editor", updated.UpdatedAt, updated.UpdatedBy, before.UpdatedAt)
+	}
+	if updated.CreatedAt.Location() != time.UTC || updated.UpdatedAt.Location() != time.UTC {
+		t.Errorf("updated audit locations = (%v, %v), want UTC", updated.CreatedAt.Location(), updated.UpdatedAt.Location())
+	}
+
+	got, err := repository.Watchlist(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("Watchlist() after update error = %v", err)
+	}
+	if !reflect.DeepEqual(got, updated) {
+		t.Errorf("Watchlist() = %#v, want %#v", got, updated)
+	}
+
+	var instruments, auditedInstruments int
+	if err := database.Pool.QueryRow(t.Context(), `
+SELECT count(*), count(*) FILTER (WHERE created_by = 'editor' AND updated_by = 'editor')
+FROM watchlist_instruments
+WHERE watchlist_id = $1
+`, created.ID).Scan(&instruments, &auditedInstruments); err != nil {
+		t.Fatalf("query replacement instrument audit: %v", err)
+	}
+	if instruments != 3 || auditedInstruments != 3 {
+		t.Errorf("replacement instrument counts = (%d, %d), want (3, 3)", instruments, auditedInstruments)
+	}
+}
+
 func TestRepositoryPersistsUnicodeSymbolsWithGoCanonicalization(t *testing.T) {
 	database := openDatabase(t)
 	repository, _ := NewRepository(database.Pool)
@@ -143,6 +207,15 @@ func TestRepositoryReturnsEmptyWatchlistListAndMissingID(t *testing.T) {
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("Watchlist() error = %v, want pgx.ErrNoRows", err)
 	}
+	_, err = repository.UpdateWatchlist(
+		t.Context(),
+		"00000000-0000-0000-0000-000000000001",
+		watchlist.Definition{Name: "Missing", Symbols: []string{"SPY"}},
+		"watchlist-user",
+	)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("UpdateWatchlist() error = %v, want pgx.ErrNoRows", err)
+	}
 }
 
 func TestRepositoryRollsBackAtomicCreation(t *testing.T) {
@@ -171,6 +244,38 @@ ADD CONSTRAINT chk_watchlist_instruments_test_rejection CHECK (symbol <> 'REJECT
 	}
 	if watchlists != 0 || instruments != 0 {
 		t.Errorf("row counts = (%d, %d), want atomic rollback to zero", watchlists, instruments)
+	}
+}
+
+func TestRepositoryRollsBackAtomicUpdate(t *testing.T) {
+	database := openDatabase(t)
+	repository, _ := NewRepository(database.Pool)
+	created, err := repository.CreateWatchlist(t.Context(), watchlist.Definition{
+		Name: "Original", Symbols: []string{"SPY", "EURUSD"},
+	}, "creator")
+	if err != nil {
+		t.Fatalf("CreateWatchlist() error = %v", err)
+	}
+	if _, err := database.Pool.Exec(t.Context(), `
+ALTER TABLE watchlist_instruments
+ADD CONSTRAINT chk_watchlist_instruments_test_update_rejection CHECK (symbol <> 'REJECT')
+`); err != nil {
+		t.Fatalf("add rejection constraint: %v", err)
+	}
+
+	_, err = repository.UpdateWatchlist(t.Context(), created.ID, watchlist.Definition{
+		Name: "Changed", Symbols: []string{"OK", "REJECT"},
+	}, "editor")
+	if err == nil || !strings.Contains(err.Error(), "insert watchlist instrument 1") {
+		t.Fatalf("UpdateWatchlist() error = %v, want contextual instrument failure", err)
+	}
+
+	got, err := repository.Watchlist(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("Watchlist() after rollback error = %v", err)
+	}
+	if !reflect.DeepEqual(got, created) {
+		t.Errorf("Watchlist() after rollback = %#v, want %#v", got, created)
 	}
 }
 
@@ -245,6 +350,18 @@ func TestRepositoryValidatesBeforePostgreSQL(t *testing.T) {
 		if _, err := repository.Watchlist(t.Context(), id); err == nil {
 			t.Fatalf("Watchlist(%q) error = nil, want validation error", id)
 		}
+		if _, err := repository.UpdateWatchlist(t.Context(), id, valid, "user"); err == nil {
+			t.Fatalf("UpdateWatchlist(%q) error = nil, want validation error", id)
+		}
+	}
+	for _, test := range definitions {
+		t.Run("update "+test.name, func(t *testing.T) {
+			if _, err := repository.UpdateWatchlist(
+				t.Context(), "00000000-0000-0000-0000-000000000001", test.definition, test.actor,
+			); err == nil {
+				t.Fatal("UpdateWatchlist() error = nil, want validation error")
+			}
+		})
 	}
 	for _, limit := range []int{0, watchlist.MaxWatchlistsLimit + 1} {
 		if _, err := repository.Watchlists(t.Context(), limit); err == nil {
@@ -261,6 +378,14 @@ func TestRepositoryPreservesCancellation(t *testing.T) {
 
 	if _, err := repository.CreateWatchlist(ctx, watchlist.Definition{Name: "Macro", Symbols: []string{"SPY"}}, "user"); !errors.Is(err, context.Canceled) {
 		t.Errorf("CreateWatchlist() error = %v, want context.Canceled", err)
+	}
+	if _, err := repository.UpdateWatchlist(
+		ctx,
+		"00000000-0000-0000-0000-000000000001",
+		watchlist.Definition{Name: "Macro", Symbols: []string{"SPY"}},
+		"user",
+	); !errors.Is(err, context.Canceled) {
+		t.Errorf("UpdateWatchlist() error = %v, want context.Canceled", err)
 	}
 	if _, err := repository.Watchlists(ctx, 1); !errors.Is(err, context.Canceled) {
 		t.Errorf("Watchlists() error = %v, want context.Canceled", err)

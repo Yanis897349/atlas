@@ -25,9 +25,10 @@ type StoredWatchlist struct {
 	UpdatedBy string
 }
 
-// Persistence creates immutable watchlist definitions.
+// Persistence creates and updates watchlist definitions.
 type Persistence interface {
 	CreateWatchlist(context.Context, Definition, string) (StoredWatchlist, error)
+	UpdateWatchlist(context.Context, string, Definition, string) (StoredWatchlist, error)
 }
 
 // Reader retrieves stored watchlist definitions.

@@ -279,6 +279,15 @@ func (repository *watchlistRepositoryStub) CreateWatchlist(
 	return stored, nil
 }
 
+func (repository *watchlistRepositoryStub) UpdateWatchlist(
+	_ context.Context,
+	_ string,
+	_ watchlist.Definition,
+	_ string,
+) (watchlist.StoredWatchlist, error) {
+	return watchlist.StoredWatchlist{}, errors.New("not implemented")
+}
+
 func (repository *watchlistRepositoryStub) Watchlist(_ context.Context, id string) (watchlist.StoredWatchlist, error) {
 	repository.lookupCalls++
 	repository.id = id
