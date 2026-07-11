@@ -11,6 +11,7 @@ import (
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/Yanis897349/atlas/internal/calendar/sourcehttp"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
+	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -92,6 +93,22 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			return fmt.Errorf("configure economic event repository: %w", err)
 		}
 		return runUpcomingEvents(ctx, repository, stdout, parsedCommand.upcomingEventsQuery)
+	case "daily-brief-input":
+		sourceRepository, err := ingestionpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure source record repository: %w", err)
+		}
+		eventRepository, err := calendarpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure economic event repository: %w", err)
+		}
+		return runDailyBriefInput(
+			ctx,
+			sourceRepository,
+			eventRepository,
+			stdout,
+			parsedCommand.dailyBriefInputQuery,
+		)
 	default:
 		panic("validated command is not handled")
 	}

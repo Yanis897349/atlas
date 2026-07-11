@@ -53,17 +53,7 @@ func runUpcomingEvents(
 
 	output := make([]upcomingEventOutput, 0, len(events))
 	for _, event := range events {
-		output = append(output, upcomingEventOutput{
-			ID:              event.ID,
-			Source:          event.Source,
-			ExternalEventID: event.ExternalEventID,
-			Name:            event.Name,
-			Region:          event.Region,
-			EventType:       event.Type,
-			ScheduledAt:     event.ScheduledAt.UTC().Format(time.RFC3339Nano),
-			SourceURL:       event.SourceURL,
-			RetrievedAt:     event.RetrievedAt.UTC().Format(time.RFC3339Nano),
-		})
+		output = append(output, newUpcomingEventOutput(event))
 	}
 
 	encoder := json.NewEncoder(stdout)
@@ -72,4 +62,22 @@ func runUpcomingEvents(
 		return fmt.Errorf("encode upcoming economic events: %w", err)
 	}
 	return nil
+}
+
+func newUpcomingEventOutput(event calendarpostgres.StoredEvent) upcomingEventOutput {
+	return upcomingEventOutput{
+		ID:              event.ID,
+		Source:          event.Source,
+		ExternalEventID: event.ExternalEventID,
+		Name:            event.Name,
+		Region:          event.Region,
+		EventType:       event.Type,
+		ScheduledAt:     formatOutputTime(event.ScheduledAt),
+		SourceURL:       event.SourceURL,
+		RetrievedAt:     formatOutputTime(event.RetrievedAt),
+	}
+}
+
+func formatOutputTime(value time.Time) string {
+	return value.UTC().Format(time.RFC3339Nano)
 }
