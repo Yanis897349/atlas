@@ -16,6 +16,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar/ecb"
 	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
+	"github.com/Yanis897349/atlas/internal/calendar/spglobal"
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 )
 
@@ -322,6 +323,30 @@ func calendarCommandTests() []calendarCommandTest {
 				dependencies.Eurostat.CalendarURL = url
 			},
 		},
+		{
+			name:                 "S&P Global",
+			command:              "ingest-spglobal",
+			source:               spglobal.Source,
+			actor:                spglobalIngestionActor,
+			canonicalURL:         spglobal.CalendarURL,
+			contentType:          "text/html",
+			body:                 testSPGlobalCalendar,
+			correctedBody:        strings.Replace(testSPGlobalCalendar, "January 23", "January 24", 1),
+			eventID:              "eurozone-flash-pmi-2026-01",
+			correctedScheduledAt: time.Date(2026, time.January, 24, 8, 0, 0, 0, time.UTC),
+			eventCount:           2,
+			output:               "ingested 2 S&P Global PMI calendar events\n",
+			configurationError:   "configure S&P Global PMI calendar: invalid S&P Global PMI calendar URL",
+			retrievalError:       "ingest S&P Global PMI calendar: fetch economic events: fetch S&P Global PMI calendar",
+			persistenceError:     "ingest S&P Global PMI calendar: persist economic event 1: upsert economic event",
+			ingestionError:       "ingest S&P Global PMI calendar",
+			configure: func(dependencies *Dependencies, server *httptest.Server, now func() time.Time) {
+				dependencies.SPGlobal = calendarSourceDependencies(server, now)
+			},
+			setURL: func(dependencies *Dependencies, url string) {
+				dependencies.SPGlobal.CalendarURL = url
+			},
+		},
 	}
 }
 
@@ -436,3 +461,16 @@ const testEurostatCalendar = `[
     "title": "Retail trade"
   }
 ]`
+
+const testSPGlobalCalendar = `<!doctype html>
+<html lang="en"><body>
+  <main>
+    <h1>Calendar</h1>
+    <section>
+      <h2>Upcoming</h2>
+      <h3>2026</h3>
+      <article><h4>January 23</h4><div>08:00 UTC S&amp;P Global Flash Eurozone PMI</div></article>
+      <article><h4>June 23</h4><div>08:00 UTC S&amp;P Global Flash Eurozone PMI</div></article>
+    </section>
+  </main>
+</body></html>`

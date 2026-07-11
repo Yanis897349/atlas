@@ -13,6 +13,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 	"github.com/Yanis897349/atlas/internal/calendar/fed"
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
+	"github.com/Yanis897349/atlas/internal/calendar/spglobal"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,6 +24,7 @@ const (
 	ecbIngestionActor      = "atlas-ecb-calendar-ingestion"
 	eurostatIngestionActor = "atlas-eurostat-calendar-ingestion"
 	fedIngestionActor      = "atlas-fed-calendar-ingestion"
+	spglobalIngestionActor = "atlas-spglobal-calendar-ingestion"
 )
 
 type calendarIngestionCommand struct {
@@ -108,6 +110,19 @@ var calendarIngestionCommands = []calendarIngestionCommand{
 				Client:        dependencies.Eurostat.HTTPClient,
 				Now:           dependencies.Eurostat.Now,
 				RequestBudget: dependencies.Eurostat.RequestBudget,
+			})
+		},
+	},
+	{
+		name:         "ingest-spglobal",
+		calendarName: "S&P Global PMI calendar",
+		actor:        spglobalIngestionActor,
+		newAdapter: func(dependencies Dependencies) (calendar.Adapter, error) {
+			return spglobal.NewAdapter(spglobal.Config{
+				CalendarURL:   dependencies.SPGlobal.CalendarURL,
+				Client:        dependencies.SPGlobal.HTTPClient,
+				Now:           dependencies.SPGlobal.Now,
+				RequestBudget: dependencies.SPGlobal.RequestBudget,
 			})
 		},
 	},
