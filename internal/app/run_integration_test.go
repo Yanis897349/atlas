@@ -1,14 +1,19 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Yanis897349/atlas/internal/calendar"
+	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 )
 
@@ -96,6 +101,114 @@ func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
 			t.Fatalf("Run(ingest-rss) error = %v, want contextual cancellation", err)
 		}
 	})
+}
+
+func TestRunListsUpcomingEventsEndToEnd(t *testing.T) {
+	database := postgrestest.Open(t)
+	dependencies := Dependencies{Getenv: applicationDatabaseEnv(database.URL)}
+	if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
+		t.Fatalf("Run(migrate) error = %v", err)
+	}
+	repository, err := calendarpostgres.NewRepository(database.Pool)
+	if err != nil {
+		t.Fatalf("NewRepository() error = %v", err)
+	}
+
+	windowStart := time.Date(2026, time.August, 1, 8, 0, 0, 0, time.UTC)
+	windowEnd := windowStart.Add(4 * time.Hour)
+	events := []calendar.Event{
+		commandEvent("before", calendar.RegionUnitedStates, windowStart.Add(-time.Microsecond)),
+		commandEvent("start", calendar.RegionUnitedStates, windowStart),
+		commandEvent("middle-b", calendar.RegionUnitedStates, windowStart.Add(2*time.Hour)),
+		commandEvent("middle-a", calendar.RegionUnitedStates, windowStart.Add(2*time.Hour)),
+		commandEvent("end", calendar.RegionUnitedStates, windowEnd),
+		commandEvent("after", calendar.RegionUnitedStates, windowEnd.Add(time.Microsecond)),
+		commandEvent("other-region", calendar.RegionEurozone, windowStart.Add(time.Hour)),
+	}
+	storedByExternalID := make(map[string]calendarpostgres.StoredEvent, len(events))
+	for _, event := range events {
+		stored, persistErr := repository.UpsertEvent(t.Context(), event, "calendar-ingestion")
+		if persistErr != nil {
+			t.Fatalf("UpsertEvent(%q) error = %v", event.ExternalEventID, persistErr)
+		}
+		storedByExternalID[event.ExternalEventID] = stored
+	}
+
+	stdout := &bytes.Buffer{}
+	dependencies.Stdout = stdout
+	err = Run(t.Context(), []string{
+		"upcoming-events",
+		"--region", "united_states",
+		"--from", "2026-08-01T10:00:00+02:00",
+		"--to", "2026-08-01T12:00:00Z",
+		"--limit", "3",
+	}, dependencies)
+	if err != nil {
+		t.Fatalf("Run(upcoming-events) error = %v", err)
+	}
+
+	middleIDs := []string{storedByExternalID["middle-a"].ID, storedByExternalID["middle-b"].ID}
+	sort.Strings(middleIDs)
+	wantIDs := []string{storedByExternalID["start"].ID, middleIDs[0], middleIDs[1]}
+	wantExternalIDs := []string{"start"}
+	for _, id := range middleIDs {
+		if id == storedByExternalID["middle-a"].ID {
+			wantExternalIDs = append(wantExternalIDs, "middle-a")
+		} else {
+			wantExternalIDs = append(wantExternalIDs, "middle-b")
+		}
+	}
+
+	var output []upcomingEventOutput
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode command JSON: %v", err)
+	}
+	if len(output) != 3 {
+		t.Fatalf("output count = %d, want 3", len(output))
+	}
+	for index := range output {
+		if output[index].ID != wantIDs[index] || output[index].ExternalEventID != wantExternalIDs[index] {
+			t.Errorf("output[%d] identity = (%q, %q), want (%q, %q)", index, output[index].ID, output[index].ExternalEventID, wantIDs[index], wantExternalIDs[index])
+		}
+		if output[index].Source != "example-calendar" || output[index].SourceURL == "" {
+			t.Errorf("output[%d] source citation = (%q, %q), want populated", index, output[index].Source, output[index].SourceURL)
+		}
+		if !strings.HasSuffix(output[index].ScheduledAt, "Z") || !strings.HasSuffix(output[index].RetrievedAt, "Z") {
+			t.Errorf("output[%d] times = (%q, %q), want UTC", index, output[index].ScheduledAt, output[index].RetrievedAt)
+		}
+	}
+
+	stdout.Reset()
+	err = Run(t.Context(), []string{
+		"upcoming-events",
+		"--region", "united_states",
+		"--from", "2026-08-01T08:00:00Z",
+		"--to", "2026-08-01T12:00:00Z",
+		"--limit", "10",
+	}, dependencies)
+	if err != nil {
+		t.Fatalf("Run(upcoming-events inclusive window) error = %v", err)
+	}
+	output = nil
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode inclusive command JSON: %v", err)
+	}
+	if len(output) != 4 || output[0].ExternalEventID != "start" || output[len(output)-1].ExternalEventID != "end" {
+		t.Errorf("inclusive output boundary events = %#v, want start through end", output)
+	}
+}
+
+func commandEvent(externalEventID string, region calendar.Region, scheduledAt time.Time) calendar.Event {
+	return calendar.Event{
+		Source:          "example-calendar",
+		ExternalEventID: externalEventID,
+		Name:            "Economic event " + externalEventID,
+		Region:          region,
+		Type:            calendar.EventTypeGDP,
+		ScheduledAt:     scheduledAt,
+		SourceURL:       "https://example.com/calendar/" + externalEventID,
+		RetrievedAt:     time.Date(2026, time.July, 11, 8, 0, 0, 0, time.UTC),
+	}
 }
 
 func applicationDatabaseEnv(databaseURL string) func(string) string {

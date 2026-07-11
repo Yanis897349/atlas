@@ -3,12 +3,12 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
+	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/Yanis897349/atlas/internal/calendar/sourcehttp"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
@@ -37,11 +37,9 @@ type Dependencies struct {
 
 // Run executes one Atlas command.
 func Run(ctx context.Context, arguments []string, dependencies Dependencies) error {
-	if len(arguments) != 1 {
-		return errors.New("usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb>")
-	}
-	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" && arguments[0] != "ingest-bls" && arguments[0] != "ingest-fed" && arguments[0] != "ingest-ecb" {
-		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb>", arguments[0])
+	parsedCommand, err := parseCommand(arguments)
+	if err != nil {
+		return err
 	}
 
 	getenv := dependencies.Getenv
@@ -66,7 +64,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 	if stdout == nil {
 		stdout = io.Discard
 	}
-	switch arguments[0] {
+	switch parsedCommand.name {
 	case "migrate":
 		if err := databasepostgres.Migrate(ctx, pool); err != nil {
 			return fmt.Errorf("migrate PostgreSQL: %w", err)
@@ -81,6 +79,12 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return runFedIngestion(ctx, pool, dependencies, stdout)
 	case "ingest-ecb":
 		return runECBIngestion(ctx, pool, dependencies, stdout)
+	case "upcoming-events":
+		repository, err := calendarpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure economic event repository: %w", err)
+		}
+		return runUpcomingEvents(ctx, repository, stdout, parsedCommand.upcomingEventsQuery)
 	default:
 		panic("validated command is not handled")
 	}
