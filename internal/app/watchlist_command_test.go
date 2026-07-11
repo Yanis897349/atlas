@@ -257,6 +257,7 @@ type watchlistRepositoryStub struct {
 	id          string
 	limit       int
 	createCalls int
+	updateCalls int
 	lookupCalls int
 	listCalls   int
 }
@@ -281,11 +282,23 @@ func (repository *watchlistRepositoryStub) CreateWatchlist(
 
 func (repository *watchlistRepositoryStub) UpdateWatchlist(
 	_ context.Context,
-	_ string,
-	_ watchlist.Definition,
-	_ string,
+	id string,
+	definition watchlist.Definition,
+	actor string,
 ) (watchlist.StoredWatchlist, error) {
-	return watchlist.StoredWatchlist{}, errors.New("not implemented")
+	repository.updateCalls++
+	repository.id = id
+	repository.definition = definition
+	repository.actor = actor
+	if repository.err != nil {
+		return watchlist.StoredWatchlist{}, repository.err
+	}
+	stored := storedWatchlistFixture()
+	stored.ID = id
+	stored.Definition = definition
+	stored.UpdatedAt = stored.UpdatedAt.Add(time.Hour)
+	stored.UpdatedBy = actor
+	return stored, nil
 }
 
 func (repository *watchlistRepositoryStub) Watchlist(_ context.Context, id string) (watchlist.StoredWatchlist, error) {

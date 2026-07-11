@@ -87,39 +87,15 @@ func parseCreateWatchlistCommand(arguments []string) (createWatchlistCommand, er
 		}
 	}
 
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return createWatchlistCommand{}, invalidWatchlistArguments(
-			"create-watchlist", createWatchlistUsage, fmt.Errorf("--name must not be blank"),
-		)
-	}
-	actor = strings.TrimSpace(actor)
-	if actor == "" {
-		return createWatchlistCommand{}, invalidWatchlistArguments(
-			"create-watchlist", createWatchlistUsage, fmt.Errorf("--actor must not be blank"),
-		)
-	}
-
-	normalizedSymbols := make([]string, len(symbols))
-	seen := make(map[string]struct{}, len(symbols))
-	for index, symbol := range symbols {
-		symbol = strings.ToUpper(strings.TrimSpace(symbol))
-		if symbol == "" {
-			return createWatchlistCommand{}, invalidWatchlistArguments(
-				"create-watchlist", createWatchlistUsage, fmt.Errorf("--symbol %d must not be blank", index+1),
-			)
-		}
-		if _, exists := seen[symbol]; exists {
-			return createWatchlistCommand{}, invalidWatchlistArguments(
-				"create-watchlist", createWatchlistUsage, fmt.Errorf("--symbol %q is duplicated", symbol),
-			)
-		}
-		seen[symbol] = struct{}{}
-		normalizedSymbols[index] = symbol
+	definition, actor, err := normalizeWatchlistCommandDefinition(
+		"create-watchlist", createWatchlistUsage, name, actor, symbols,
+	)
+	if err != nil {
+		return createWatchlistCommand{}, err
 	}
 
 	return createWatchlistCommand{
-		definition: watchlist.Definition{Name: name, Symbols: normalizedSymbols},
+		definition: definition,
 		actor:      actor,
 	}, nil
 }
@@ -172,13 +148,17 @@ func parseWatchlistQuery(arguments []string) (watchlistQuery, error) {
 		return watchlistQuery{}, invalidWatchlistArguments("watchlist", watchlistUsage, fmt.Errorf("--id is required"))
 	}
 
-	var parsed pgtype.UUID
-	if err := parsed.Scan(id.value); err != nil || !parsed.Valid {
+	if !validWatchlistID(id.value) {
 		return watchlistQuery{}, invalidWatchlistArguments(
 			"watchlist", watchlistUsage, fmt.Errorf("--id must be a UUID"),
 		)
 	}
 	return watchlistQuery{id: id.value}, nil
+}
+
+func validWatchlistID(id string) bool {
+	var parsed pgtype.UUID
+	return parsed.Scan(id) == nil && parsed.Valid
 }
 
 func invalidWatchlistArguments(commandName, usage string, err error) error {

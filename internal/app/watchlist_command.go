@@ -32,6 +32,19 @@ func runCreateWatchlist(
 	return encodeCommandJSON(stdout, "created watchlist", newWatchlistOutput(stored))
 }
 
+func runUpdateWatchlist(
+	ctx context.Context,
+	repository watchlist.Persistence,
+	stdout io.Writer,
+	command updateWatchlistCommand,
+) error {
+	stored, err := repository.UpdateWatchlist(ctx, command.id, command.definition, command.actor)
+	if err != nil {
+		return fmt.Errorf("update watchlist: %w", err)
+	}
+	return encodeCommandJSON(stdout, "updated watchlist", newWatchlistOutput(stored))
+}
+
 func runWatchlists(
 	ctx context.Context,
 	repository watchlist.Reader,

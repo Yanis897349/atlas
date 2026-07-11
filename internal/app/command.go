@@ -13,7 +13,7 @@ import (
 	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|watchlist|watchlists>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|watchlist|watchlists>"
 
 type command struct {
 	name                     string
@@ -22,6 +22,7 @@ type command struct {
 	dailyBriefInputQuery     dailybrief.InputQuery
 	storedDailyBriefsQuery   storedDailyBriefsQuery
 	createWatchlistCommand   createWatchlistCommand
+	updateWatchlistCommand   updateWatchlistCommand
 	watchlistQuery           watchlistQuery
 	watchlistsQuery          watchlistsQuery
 }
@@ -67,6 +68,12 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], createWatchlistCommand: createCommand}, nil
+	case "update-watchlist":
+		updateCommand, err := parseUpdateWatchlistCommand(arguments[1:])
+		if err != nil {
+			return command{}, err
+		}
+		return command{name: arguments[0], updateWatchlistCommand: updateCommand}, nil
 	case "watchlist":
 		query, err := parseWatchlistQuery(arguments[1:])
 		if err != nil {

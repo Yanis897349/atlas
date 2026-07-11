@@ -56,6 +56,32 @@ SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
 
 	stdout := &bytes.Buffer{}
 	dependencies.Stdout = stdout
+	if err := Run(t.Context(), []string{
+		"update-watchlist",
+		"--id", first.ID,
+		"--name", " Updated first ",
+		"--actor", " editor ",
+		"--symbol", " dxy ",
+		"--symbol", "Brk.b",
+	}, dependencies); err != nil {
+		t.Fatalf("Run(update-watchlist) error = %v", err)
+	}
+	var updated watchlistOutput
+	if err := json.Unmarshal(stdout.Bytes(), &updated); err != nil {
+		t.Fatalf("decode updated watchlist: %v", err)
+	}
+	updatedAt, err := time.Parse(time.RFC3339Nano, updated.UpdatedAt)
+	if err != nil {
+		t.Fatalf("parse updated timestamp: %v", err)
+	}
+	if updated.ID != first.ID || updated.Name != "Updated first" ||
+		!reflect.DeepEqual(updated.Symbols, []string{"DXY", "BRK.B"}) || updated.CreatedBy != "first-user" ||
+		updated.UpdatedBy != "editor" || updated.CreatedAt != "2026-07-12T08:00:00Z" ||
+		!updatedAt.After(firstTime) {
+		t.Errorf("updated output = %#v, want replaced definition with preserved creation metadata", updated)
+	}
+
+	stdout.Reset()
 	if err := Run(t.Context(), []string{"watchlists", "--limit", "1"}, dependencies); err != nil {
 		t.Fatalf("Run(watchlists) error = %v", err)
 	}
@@ -77,14 +103,12 @@ SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
 	if err := json.Unmarshal(stdout.Bytes(), &lookup); err != nil {
 		t.Fatalf("decode looked-up watchlist: %v", err)
 	}
-	if lookup.ID != first.ID || lookup.Name != "First" ||
-		!reflect.DeepEqual(lookup.Symbols, []string{"EURUSD", "SPY"}) || lookup.CreatedBy != "first-user" ||
-		lookup.UpdatedBy != "first-user" || lookup.CreatedAt != "2026-07-12T08:00:00Z" {
-		t.Errorf("looked-up output = %#v, want complete first watchlist", lookup)
+	if !reflect.DeepEqual(lookup, updated) {
+		t.Errorf("looked-up output = %#v, want updated watchlist %#v", lookup, updated)
 	}
 
 	stdout.Reset()
-	err := Run(t.Context(), []string{"watchlist", "--id", "00000000-0000-0000-0000-000000000000"}, dependencies)
+	err = Run(t.Context(), []string{"watchlist", "--id", "00000000-0000-0000-0000-000000000000"}, dependencies)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("Run(watchlist missing) error = %v, want pgx.ErrNoRows", err)
 	}
@@ -92,15 +116,30 @@ SET created_at = CASE WHEN id = $1 THEN $2 ELSE $3 END,
 		t.Errorf("missing watchlist stdout = %q, want no output", stdout.String())
 	}
 
+	stdout.Reset()
+	err = Run(t.Context(), []string{
+		"update-watchlist",
+		"--id", "00000000-0000-0000-0000-000000000000",
+		"--name", "Missing",
+		"--actor", "editor",
+		"--symbol", "SPY",
+	}, dependencies)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("Run(update-watchlist missing) error = %v, want pgx.ErrNoRows", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("missing update stdout = %q, want no output", stdout.String())
+	}
+
 	var auditedInstruments int
 	if err := database.Pool.QueryRow(t.Context(), `
 SELECT count(*)
 FROM watchlist_instruments
-WHERE watchlist_id = $1 AND created_by = 'first-user' AND updated_by = 'first-user'
+WHERE watchlist_id = $1 AND created_by = 'editor' AND updated_by = 'editor'
 `, first.ID).Scan(&auditedInstruments); err != nil {
 		t.Fatalf("query instrument audit: %v", err)
 	}
 	if auditedInstruments != 2 {
-		t.Errorf("audited instrument count = %d, want 2", auditedInstruments)
+		t.Errorf("audited replacement instrument count = %d, want 2", auditedInstruments)
 	}
 }
