@@ -158,8 +158,8 @@ PostgreSQL integration tests run when `ATLAS_TEST_DATABASE_URL` is set. The test
 Docker Compose provides PostgreSQL 17 with separate `atlas` application and `atlas_test` integration-test databases. Start it, copy the development configuration once, and export that configuration before running commands so the PostgreSQL-backed tests are not skipped:
 
 ```sh
-mise exec -- make db-up
 cp -n .env.example .env
+mise exec -- make db-up
 set -a
 . ./.env
 set +a
