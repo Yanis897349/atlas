@@ -65,16 +65,23 @@ WHERE source = $1
 				t.Fatalf("%s event count = %d, want %d", test.name, count, test.eventCount)
 			}
 
-			var sourceURL string
-			var scheduledAt time.Time
-			var storedRetrievedAt time.Time
-			if err := database.Pool.QueryRow(t.Context(), `
+			query := `
 SELECT source_url, scheduled_at, retrieved_at
 FROM economic_events
 WHERE source = $1
-ORDER BY external_event_id
-LIMIT 1
-`, test.source).Scan(&sourceURL, &scheduledAt, &storedRetrievedAt); err != nil {
+`
+			arguments := []any{test.source}
+			if test.eventID == "" {
+				query += "ORDER BY external_event_id\nLIMIT 1"
+			} else {
+				query += "  AND external_event_id = $2"
+				arguments = append(arguments, test.eventID)
+			}
+
+			var sourceURL string
+			var scheduledAt time.Time
+			var storedRetrievedAt time.Time
+			if err := database.Pool.QueryRow(t.Context(), query, arguments...).Scan(&sourceURL, &scheduledAt, &storedRetrievedAt); err != nil {
 				t.Fatalf("load %s source metadata: %v", test.name, err)
 			}
 			if sourceURL != test.canonicalURL || !storedRetrievedAt.Equal(retrievedAt) {
@@ -168,6 +175,7 @@ type calendarCommandTest struct {
 	contentType          string
 	body                 string
 	correctedBody        string
+	eventID              string
 	correctedScheduledAt time.Time
 	eventCount           int
 	output               string
@@ -298,10 +306,11 @@ func calendarCommandTests() []calendarCommandTest {
 			canonicalURL:         eurostat.CalendarURL,
 			contentType:          "application/json",
 			body:                 testEurostatCalendar,
-			correctedBody:        strings.Replace(testEurostatCalendar, "2026-02-13T12:00:00+01:00", "2026-02-14T12:00:00+01:00", 1),
-			correctedScheduledAt: time.Date(2026, time.February, 14, 11, 0, 0, 0, time.UTC),
-			eventCount:           2,
-			output:               "ingested 2 Eurostat calendar events\n",
+			correctedBody:        strings.Replace(testEurostatCalendar, "2026-03-05T11:00:00Z", "2026-03-06T11:00:00Z", 1),
+			eventID:              "eurostat-retail-sales-2026-01",
+			correctedScheduledAt: time.Date(2026, time.March, 6, 11, 0, 0, 0, time.UTC),
+			eventCount:           3,
+			output:               "ingested 3 Eurostat calendar events\n",
 			configurationError:   "configure Eurostat calendar: invalid Eurostat calendar URL",
 			retrievalError:       "ingest Eurostat calendar: fetch economic events: fetch Eurostat calendar",
 			persistenceError:     "ingest Eurostat calendar: persist economic event 1: upsert economic event",
@@ -420,5 +429,10 @@ const testEurostatCalendar = `[
     "period": "Q4/2025",
     "start": "2026-02-13T12:00:00+01:00",
     "title": "Flash estimate GDP and employment - EU and euro area"
+  },
+  {
+    "period": "January 2026",
+    "start": "2026-03-05T11:00:00Z",
+    "title": "Retail trade"
   }
 ]`

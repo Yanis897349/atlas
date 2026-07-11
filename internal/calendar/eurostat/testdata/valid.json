@@ -10,6 +10,12 @@
     "title": "Inflation - euro area"
   },
   {
+    "recordid": "22486370",
+    "period": "December 2025",
+    "start": "2026-02-05T11:00Z",
+    "title": "Retail trade"
+  },
+  {
     "recordid": "22486412",
     "period": "Q4/2025",
     "start": "2026-02-13T12:00:00+01:00",
@@ -26,5 +32,11 @@
     "period": "Q4/2025",
     "start": "2026-04-20T11:00:00.123Z",
     "title": "GDP main aggregates and employment - update"
+  },
+  {
+    "recordid": "22487070",
+    "period": "March 2026",
+    "start": "2026-05-07T11:00Z",
+    "title": "Retail trade"
   }
 ]

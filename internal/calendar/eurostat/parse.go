@@ -13,9 +13,15 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar"
 )
 
-const eventIdentityPrefix = "eurostat-gdp-"
+const (
+	gdpIdentityPrefix         = "eurostat-gdp-"
+	retailSalesIdentityPrefix = "eurostat-retail-sales-"
+	retailSalesTitle          = "Retail trade"
+)
 
 var periodPattern = regexp.MustCompile(`^Q([1-4])/(\d{4})$`)
+
+const releaseTimeWithoutSeconds = "2006-01-02T15:04Z07:00"
 
 type release struct {
 	Period string `json:"period"`
@@ -23,10 +29,9 @@ type release struct {
 	Title  string `json:"title"`
 }
 
-type releaseIdentity struct {
-	stage         string
-	quarter       int
-	referenceYear int
+type eventIdentity struct {
+	externalEventID string
+	eventType       calendar.EventType
 }
 
 func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
@@ -45,13 +50,12 @@ func parseEvents(body []byte, retrievedAt time.Time) ([]calendar.Event, error) {
 		if title == "" {
 			return nil, fmt.Errorf("release %d title is required", index+1)
 		}
-		stage, supported := supportedStage(title)
-		if !supported {
-			continue
-		}
-		identity, err := normalizeIdentity(current.Period, stage)
+		identity, supported, err := normalizeIdentity(title, current.Period)
 		if err != nil {
 			return nil, fmt.Errorf("normalize Eurostat release %d: %w", index+1, err)
+		}
+		if !supported {
+			continue
 		}
 		event, err := normalizeRelease(current, title, identity, retrievedAt)
 		if err != nil {
@@ -81,41 +85,73 @@ func supportedStage(title string) (string, bool) {
 	}
 }
 
-func normalizeIdentity(period, stage string) (releaseIdentity, error) {
+func normalizeIdentity(title, period string) (eventIdentity, bool, error) {
+	if title == retailSalesTitle {
+		identity, err := normalizeRetailSalesIdentity(period)
+		return identity, true, err
+	}
+	stage, supported := supportedStage(title)
+	if !supported {
+		return eventIdentity{}, false, nil
+	}
+	identity, err := normalizeGDPIdentity(period, stage)
+	return identity, true, err
+}
+
+func normalizeGDPIdentity(period, stage string) (eventIdentity, error) {
 	trimmed := strings.TrimSpace(period)
 	matches := periodPattern.FindStringSubmatch(trimmed)
 	if matches == nil {
-		return releaseIdentity{}, fmt.Errorf("invalid GDP reference period %q", trimmed)
+		return eventIdentity{}, fmt.Errorf("invalid GDP reference period %q", trimmed)
 	}
 	referenceYear, err := strconv.Atoi(matches[2])
 	if err != nil {
-		return releaseIdentity{}, fmt.Errorf("invalid GDP reference period %q: %w", trimmed, err)
+		return eventIdentity{}, fmt.Errorf("invalid GDP reference period %q: %w", trimmed, err)
 	}
-	return releaseIdentity{
-		stage:         stage,
-		quarter:       int(matches[1][0] - '0'),
-		referenceYear: referenceYear,
+	return eventIdentity{
+		externalEventID: fmt.Sprintf("%s%d-q%c-%s", gdpIdentityPrefix, referenceYear, matches[1][0], stage),
+		eventType:       calendar.EventTypeGDP,
 	}, nil
 }
 
-func normalizeRelease(current release, title string, identity releaseIdentity, retrievedAt time.Time) (calendar.Event, error) {
+func normalizeRetailSalesIdentity(period string) (eventIdentity, error) {
+	trimmed := strings.TrimSpace(period)
+	referenceMonth, err := time.Parse("January 2006", trimmed)
+	if err != nil {
+		return eventIdentity{}, fmt.Errorf("invalid retail sales reference period %q: %w", trimmed, err)
+	}
+	return eventIdentity{
+		externalEventID: fmt.Sprintf("%s%04d-%02d", retailSalesIdentityPrefix, referenceMonth.Year(), referenceMonth.Month()),
+		eventType:       calendar.EventTypeRetailSales,
+	}, nil
+}
+
+func normalizeRelease(current release, title string, identity eventIdentity, retrievedAt time.Time) (calendar.Event, error) {
 	start := strings.TrimSpace(current.Start)
 	if start == "" {
 		return calendar.Event{}, errors.New("release start is required")
 	}
-	scheduledAt, err := time.Parse(time.RFC3339Nano, start)
+	scheduledAt, err := parseReleaseTime(start)
 	if err != nil {
 		return calendar.Event{}, fmt.Errorf("invalid release start %q: %w", start, err)
 	}
 
 	return calendar.Event{
 		Source:          Source,
-		ExternalEventID: fmt.Sprintf("%s%d-q%d-%s", eventIdentityPrefix, identity.referenceYear, identity.quarter, identity.stage),
+		ExternalEventID: identity.externalEventID,
 		Name:            title,
 		Region:          calendar.RegionEurozone,
-		Type:            calendar.EventTypeGDP,
+		Type:            identity.eventType,
 		ScheduledAt:     scheduledAt.UTC(),
 		SourceURL:       CalendarURL,
 		RetrievedAt:     retrievedAt,
 	}, nil
+}
+
+func parseReleaseTime(value string) (time.Time, error) {
+	scheduledAt, err := time.Parse(time.RFC3339Nano, value)
+	if err == nil {
+		return scheduledAt, nil
+	}
+	return time.Parse(releaseTimeWithoutSeconds, value)
 }

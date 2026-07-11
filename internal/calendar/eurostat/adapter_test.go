@@ -16,7 +16,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar/eurostat"
 )
 
-func TestAdapterFetchEventsNormalizesQuarterlyGDPReleases(t *testing.T) {
+func TestAdapterFetchEventsNormalizesSupportedReleases(t *testing.T) {
 	retrievedAt := time.Date(2026, time.July, 11, 14, 30, 0, 0, time.FixedZone("CEST", 2*60*60))
 	client := fixtureClient(t, "valid.json")
 	adapter := newAdapter(t, client, func() time.Time { return retrievedAt }, 0)
@@ -34,6 +34,16 @@ func TestAdapterFetchEventsNormalizesQuarterlyGDPReleases(t *testing.T) {
 			Region:          calendar.RegionEurozone,
 			Type:            calendar.EventTypeGDP,
 			ScheduledAt:     time.Date(2026, time.January, 30, 11, 0, 0, 0, time.UTC),
+			SourceURL:       eurostat.CalendarURL,
+			RetrievedAt:     retrievedAt.UTC(),
+		},
+		{
+			Source:          eurostat.Source,
+			ExternalEventID: "eurostat-retail-sales-2025-12",
+			Name:            "Retail trade",
+			Region:          calendar.RegionEurozone,
+			Type:            calendar.EventTypeRetailSales,
+			ScheduledAt:     time.Date(2026, time.February, 5, 11, 0, 0, 0, time.UTC),
 			SourceURL:       eurostat.CalendarURL,
 			RetrievedAt:     retrievedAt.UTC(),
 		},
@@ -67,6 +77,16 @@ func TestAdapterFetchEventsNormalizesQuarterlyGDPReleases(t *testing.T) {
 			SourceURL:       eurostat.CalendarURL,
 			RetrievedAt:     retrievedAt.UTC(),
 		},
+		{
+			Source:          eurostat.Source,
+			ExternalEventID: "eurostat-retail-sales-2026-03",
+			Name:            "Retail trade",
+			Region:          calendar.RegionEurozone,
+			Type:            calendar.EventTypeRetailSales,
+			ScheduledAt:     time.Date(2026, time.May, 7, 11, 0, 0, 0, time.UTC),
+			SourceURL:       eurostat.CalendarURL,
+			RetrievedAt:     retrievedAt.UTC(),
+		},
 	}
 	if !reflect.DeepEqual(events, want) {
 		t.Errorf("FetchEvents() = %#v, want %#v", events, want)
@@ -91,6 +111,7 @@ func TestAdapterFetchEventsKeepsIdentityAcrossRetrievals(t *testing.T) {
 	}
 	now = now.Add(time.Hour)
 	client.contents = bytes.Replace(client.contents, []byte("2026-01-30T11:00:00Z"), []byte("2026-01-31T11:00:00Z"), 1)
+	client.contents = bytes.Replace(client.contents, []byte("2026-02-05T11:00Z"), []byte("2026-02-06T11:00Z"), 1)
 	second, err := adapter.FetchEvents(t.Context())
 	if err != nil {
 		t.Fatalf("second FetchEvents() error = %v", err)
@@ -104,7 +125,10 @@ func TestAdapterFetchEventsKeepsIdentityAcrossRetrievals(t *testing.T) {
 		}
 	}
 	if first[0].ScheduledAt.Equal(second[0].ScheduledAt) {
-		t.Error("ScheduledAt did not reflect the corrected release date")
+		t.Error("GDP ScheduledAt did not reflect the corrected release date")
+	}
+	if first[1].ScheduledAt.Equal(second[1].ScheduledAt) {
+		t.Error("retail sales ScheduledAt did not reflect the corrected release date")
 	}
 }
 
@@ -137,16 +161,21 @@ func TestAdapterFetchEventsCollapsesRepeatedIdentities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchEvents() error = %v", err)
 	}
-	if len(events) != 1 || events[0].ExternalEventID != "eurostat-gdp-2026-q2-preliminary-flash" {
-		t.Fatalf("FetchEvents() = %#v, want one 2026 Q2 preliminary flash estimate", events)
+	if len(events) != 2 || events[0].ExternalEventID != "eurostat-gdp-2026-q2-preliminary-flash" || events[1].ExternalEventID != "eurostat-retail-sales-2026-05" {
+		t.Fatalf("FetchEvents() = %#v, want one GDP and one retail sales event", events)
 	}
-	want := time.Date(2026, time.July, 30, 11, 0, 0, 0, time.UTC)
-	if !events[0].ScheduledAt.Equal(want) {
-		t.Errorf("ScheduledAt = %v, want first-seen time %v", events[0].ScheduledAt, want)
+	want := []time.Time{
+		time.Date(2026, time.July, 30, 11, 0, 0, 0, time.UTC),
+		time.Date(2026, time.July, 6, 11, 0, 0, 0, time.UTC),
+	}
+	for index := range events {
+		if !events[index].ScheduledAt.Equal(want[index]) {
+			t.Errorf("event %d ScheduledAt = %v, want first-seen time %v", index, events[index].ScheduledAt, want[index])
+		}
 	}
 }
 
-func TestAdapterFetchEventsIgnoresUnsupportedReleasesBeforeGDPValidation(t *testing.T) {
+func TestAdapterFetchEventsIgnoresUnsupportedReleasesBeforeFieldValidation(t *testing.T) {
 	adapter := newAdapter(t, fixtureClient(t, "unsupported.json"), nil, 0)
 
 	events, err := adapter.FetchEvents(t.Context())
@@ -170,6 +199,8 @@ func TestAdapterFetchEventsRejectsMalformedCalendarData(t *testing.T) {
 		{name: "invalid fixture period", json: string(fixtureContents(t, "malformed.json")), want: "invalid GDP reference period"},
 		{name: "missing period", json: supportedRelease("", "2026-04-30T11:00:00Z"), want: "invalid GDP reference period"},
 		{name: "invalid quarter", json: supportedRelease("Q5/2026", "2026-04-30T11:00:00Z"), want: "invalid GDP reference period"},
+		{name: "missing retail period", json: retailSalesRelease("", "2026-04-08T11:00:00Z"), want: "invalid retail sales reference period"},
+		{name: "invalid retail period", json: retailSalesRelease("February 2026 revised", "2026-04-08T11:00:00Z"), want: "invalid retail sales reference period"},
 		{name: "missing start", json: supportedRelease("Q1/2026", ""), want: "release start is required"},
 		{name: "invalid start", json: supportedRelease("Q1/2026", "April 30, 2026"), want: "invalid release start"},
 	}
@@ -214,7 +245,7 @@ func assertCalendarQuery(t *testing.T, query url.Values) {
 		"category":        "0",
 		"end":             "2027-01-01T00:00:00+01:00",
 		"isEuroindicator": "true",
-		"keywords":        "GDP and employment",
+		"keywords":        "",
 		"start":           "2026-01-01T00:00:00+01:00",
 		"theme":           "0",
 	}
@@ -227,6 +258,10 @@ func assertCalendarQuery(t *testing.T, query url.Values) {
 
 func supportedRelease(period, start string) string {
 	return `[{"period":"` + period + `","start":"` + start + `","title":"Preliminary flash estimate GDP - EU and euro area"}]`
+}
+
+func retailSalesRelease(period, start string) string {
+	return `[{"period":"` + period + `","start":"` + start + `","title":"Retail trade"}]`
 }
 
 func newAdapter(t *testing.T, client eurostat.HTTPClient, now func() time.Time, requestBudget time.Duration) *eurostat.Adapter {

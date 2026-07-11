@@ -1,4 +1,5 @@
 [
   {"title": "Inflation - euro area"},
-  {"title": "Industrial production", "period": "invalid", "start": "invalid"}
+  {"title": "Industrial production", "period": "invalid", "start": "invalid"},
+  {"title": "Retail trades", "period": "invalid", "start": "invalid"}
 ]

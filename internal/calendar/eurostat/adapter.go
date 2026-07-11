@@ -1,4 +1,4 @@
-// Package eurostat retrieves and normalizes scheduled Eurostat GDP releases.
+// Package eurostat retrieves and normalizes supported Eurostat economic releases.
 package eurostat
 
 import (
@@ -74,7 +74,7 @@ func NewAdapter(config Config) (*Adapter, error) {
 	return &Adapter{fetcher: fetcher, now: now, location: location}, nil
 }
 
-// FetchEvents retrieves the current calendar year and returns supported unique GDP releases.
+// FetchEvents retrieves the current calendar year and returns supported unique releases.
 func (adapter *Adapter) FetchEvents(ctx context.Context) ([]calendar.Event, error) {
 	queryTime := adapter.now()
 	body, err := adapter.fetcher.FetchWithQuery(ctx, adapter.calendarQuery(queryTime))
@@ -99,7 +99,7 @@ func (adapter *Adapter) calendarQuery(now time.Time) url.Values {
 		"category":        {"0"},
 		"end":             {end.Format(time.RFC3339)},
 		"isEuroindicator": {strconv.FormatBool(true)},
-		"keywords":        {"GDP and employment"},
+		"keywords":        {""},
 		"start":           {start.Format(time.RFC3339)},
 		"theme":           {"0"},
 	}
