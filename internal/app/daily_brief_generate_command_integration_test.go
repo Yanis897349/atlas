@@ -106,10 +106,25 @@ func TestRunGeneratesDailyBriefEndToEnd(t *testing.T) {
 	if output.Region != calendar.RegionUnitedStates || len(output.Sections) != 1 || len(output.Sections[0].Citations) != 1 {
 		t.Fatalf("command output = %#v, want one cited United States section", output)
 	}
+	if !validUUID(output.ID) || output.Provider != "openai" || output.Model != "command-model" ||
+		output.CreatedBy != dailyBriefGenerationActor || output.UpdatedBy != dailyBriefGenerationActor {
+		t.Errorf("stored command metadata = %#v, want UUID, OpenAI model, and generation audit", output)
+	}
+	if !strings.HasSuffix(output.PublicationWindow.From, "Z") || !strings.HasSuffix(output.EventWindow.To, "Z") ||
+		!strings.HasSuffix(output.CreatedAt, "Z") || !strings.HasSuffix(output.UpdatedAt, "Z") {
+		t.Errorf("stored command times = %#v, want UTC output", output)
+	}
 	citation := output.Sections[0].Citations[0]
 	if citation.Kind != dailyBriefCitationUpcomingEvent || citation.Source != "example-calendar" ||
 		citation.URL != "https://example.com/calendar/first" {
 		t.Errorf("command citation = %#v, want canonical first-event citation", citation)
+	}
+	var briefCount int
+	if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM daily_briefs").Scan(&briefCount); err != nil {
+		t.Fatalf("count daily briefs: %v", err)
+	}
+	if briefCount != 1 {
+		t.Errorf("daily brief count = %d, want 1", briefCount)
 	}
 
 	dependencies.OpenAIHTTPClient = openAIHTTPClientFunc(func(*http.Request) (*http.Response, error) {
@@ -124,6 +139,12 @@ func TestRunGeneratesDailyBriefEndToEnd(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "OpenAI Responses API returned status 429") ||
 		strings.Contains(err.Error(), "command-secret") {
 		t.Fatalf("Run(daily-brief) provider error = %v, want sanitized contextual failure", err)
+	}
+	if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM daily_briefs").Scan(&briefCount); err != nil {
+		t.Fatalf("count daily briefs after provider failure: %v", err)
+	}
+	if briefCount != 1 {
+		t.Errorf("daily brief count after provider failure = %d, want 1", briefCount)
 	}
 }
 

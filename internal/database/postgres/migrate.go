@@ -18,6 +18,9 @@ var economicEventsMigration string
 //go:embed migrations/000003_index_source_records_published_at.up.sql
 var sourceRecordsPublishedAtIndexMigration string
 
+//go:embed migrations/000004_create_daily_briefs.up.sql
+var dailyBriefsMigration string
+
 var migrations = []struct {
 	version int64
 	query   string
@@ -25,6 +28,7 @@ var migrations = []struct {
 	{version: 1, query: sourceRecordsMigration},
 	{version: 2, query: economicEventsMigration},
 	{version: 3, query: sourceRecordsPublishedAtIndexMigration},
+	{version: 4, query: dailyBriefsMigration},
 }
 
 // Migrate applies pending database migrations transactionally.

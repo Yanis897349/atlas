@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
 )
@@ -31,6 +32,12 @@ type dailyBriefDraft struct {
 	sections []dailyBriefSectionDraft
 }
 
+type dailyBriefGeneration struct {
+	provider string
+	model    string
+	draft    dailyBriefDraft
+}
+
 type dailyBriefCitation struct {
 	kind   dailyBriefCitationKind
 	id     string
@@ -45,12 +52,18 @@ type dailyBriefSection struct {
 }
 
 type dailyBrief struct {
-	region   calendar.Region
-	sections []dailyBriefSection
+	region                 calendar.Region
+	publicationWindowStart time.Time
+	publicationWindowEnd   time.Time
+	eventWindowStart       time.Time
+	eventWindowEnd         time.Time
+	provider               string
+	model                  string
+	sections               []dailyBriefSection
 }
 
 type dailyBriefGenerator interface {
-	Generate(context.Context, dailyBriefInput) (dailyBriefDraft, error)
+	Generate(context.Context, dailyBriefInput) (dailyBriefGeneration, error)
 }
 
 func generateDailyBrief(
@@ -58,26 +71,39 @@ func generateDailyBrief(
 	generator dailyBriefGenerator,
 	input dailyBriefInput,
 ) (dailyBrief, error) {
-	draft, err := generator.Generate(ctx, input)
+	generation, err := generator.Generate(ctx, input)
 	if err != nil {
 		return dailyBrief{}, fmt.Errorf("generate daily brief with provider: %w", err)
 	}
 
-	brief, err := resolveDailyBrief(input, draft)
+	brief, err := resolveDailyBrief(input, generation)
 	if err != nil {
 		return dailyBrief{}, fmt.Errorf("validate generated daily brief: %w", err)
 	}
 	return brief, nil
 }
 
-func resolveDailyBrief(input dailyBriefInput, draft dailyBriefDraft) (dailyBrief, error) {
+func resolveDailyBrief(input dailyBriefInput, generation dailyBriefGeneration) (dailyBrief, error) {
+	draft := generation.draft
+	if strings.TrimSpace(generation.provider) == "" {
+		return dailyBrief{}, errors.New("provider is required")
+	}
+	if strings.TrimSpace(generation.model) == "" {
+		return dailyBrief{}, errors.New("model is required")
+	}
 	if len(draft.sections) == 0 {
 		return dailyBrief{}, errors.New("at least one section is required")
 	}
 
 	brief := dailyBrief{
-		region:   input.region,
-		sections: make([]dailyBriefSection, 0, len(draft.sections)),
+		region:                 input.region,
+		publicationWindowStart: input.publicationWindowStart,
+		publicationWindowEnd:   input.publicationWindowEnd,
+		eventWindowStart:       input.eventWindowStart,
+		eventWindowEnd:         input.eventWindowEnd,
+		provider:               strings.TrimSpace(generation.provider),
+		model:                  strings.TrimSpace(generation.model),
+		sections:               make([]dailyBriefSection, 0, len(draft.sections)),
 	}
 	for sectionIndex, draftSection := range draft.sections {
 		if strings.TrimSpace(draftSection.heading) == "" {

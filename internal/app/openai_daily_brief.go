@@ -104,13 +104,13 @@ func newOpenAIDailyBriefGenerator(
 func (generator *openAIDailyBriefGenerator) Generate(
 	ctx context.Context,
 	input dailyBriefInput,
-) (dailyBriefDraft, error) {
+) (dailyBriefGeneration, error) {
 	requestContext, cancel := context.WithTimeout(ctx, generator.requestBudget)
 	defer cancel()
 
 	requestBody, err := newOpenAIDailyBriefRequest(requestContext, generator.model, input)
 	if err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("encode OpenAI daily brief request: %w", err)
+		return dailyBriefGeneration{}, fmt.Errorf("encode OpenAI daily brief request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(
@@ -120,7 +120,7 @@ func (generator *openAIDailyBriefGenerator) Generate(
 		bytes.NewReader(requestBody),
 	)
 	if err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("create OpenAI Responses API request: %w", err)
+		return dailyBriefGeneration{}, fmt.Errorf("create OpenAI Responses API request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Authorization", "Bearer "+generator.apiKey)
@@ -128,29 +128,29 @@ func (generator *openAIDailyBriefGenerator) Generate(
 
 	response, err := generator.client.Do(request)
 	if err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("send OpenAI Responses API request: %w", err)
+		return dailyBriefGeneration{}, fmt.Errorf("send OpenAI Responses API request: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxOpenAIResponseBytes+1))
 	if err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("read OpenAI Responses API response: %w", err)
+		return dailyBriefGeneration{}, fmt.Errorf("read OpenAI Responses API response: %w", err)
 	}
 	if len(responseBody) > maxOpenAIResponseBytes {
-		return dailyBriefDraft{}, fmt.Errorf(
+		return dailyBriefGeneration{}, fmt.Errorf(
 			"read OpenAI Responses API response: body exceeds %d bytes",
 			maxOpenAIResponseBytes,
 		)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return dailyBriefDraft{}, openAIProviderError(response.StatusCode, responseBody)
+		return dailyBriefGeneration{}, openAIProviderError(response.StatusCode, responseBody)
 	}
 
 	draft, err := decodeOpenAIDailyBriefResponse(responseBody)
 	if err != nil {
-		return dailyBriefDraft{}, fmt.Errorf("decode OpenAI Responses API response: %w", err)
+		return dailyBriefGeneration{}, fmt.Errorf("decode OpenAI Responses API response: %w", err)
 	}
-	return draft, nil
+	return dailyBriefGeneration{provider: "openai", model: generator.model, draft: draft}, nil
 }
 
 func isLoopbackHost(host string) bool {

@@ -129,11 +129,16 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		if err != nil {
 			return fmt.Errorf("configure economic event repository: %w", err)
 		}
+		briefRepository, err := newDailyBriefRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure daily brief repository: %w", err)
+		}
 		return runDailyBrief(
 			ctx,
 			sourceRepository,
 			eventRepository,
 			dailyBriefGenerator,
+			briefRepository,
 			stdout,
 			parsedCommand.dailyBriefInputQuery,
 		)

@@ -40,7 +40,13 @@ func TestGenerateDailyBriefResolvesCanonicalCitations(t *testing.T) {
 	}
 
 	want := dailyBrief{
-		region: calendar.RegionUnitedStates,
+		region:                 calendar.RegionUnitedStates,
+		publicationWindowStart: input.publicationWindowStart,
+		publicationWindowEnd:   input.publicationWindowEnd,
+		eventWindowStart:       input.eventWindowStart,
+		eventWindowEnd:         input.eventWindowEnd,
+		provider:               "openai",
+		model:                  "test-model",
 		sections: []dailyBriefSection{
 			{
 				heading: "Growth is slowing",
@@ -140,6 +146,32 @@ func TestGenerateDailyBriefRejectsInvalidDraft(t *testing.T) {
 	}
 }
 
+func TestResolveDailyBriefRequiresProviderProvenance(t *testing.T) {
+	validDraft := dailyBriefDraft{sections: []dailyBriefSectionDraft{{
+		heading: "What matters",
+		content: "A cited development.",
+		citations: []dailyBriefCitationReference{{
+			kind: dailyBriefCitationSourceRecord,
+			id:   "record-news",
+		}},
+	}}}
+	for _, test := range []struct {
+		name       string
+		generation dailyBriefGeneration
+		contains   string
+	}{
+		{name: "missing provider", generation: dailyBriefGeneration{model: "model", draft: validDraft}, contains: "provider is required"},
+		{name: "missing model", generation: dailyBriefGeneration{provider: "provider", draft: validDraft}, contains: "model is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := resolveDailyBrief(dailyBriefGenerationInput(), test.generation); err == nil ||
+				!strings.Contains(err.Error(), test.contains) {
+				t.Fatalf("resolveDailyBrief() error = %v, want %q", err, test.contains)
+			}
+		})
+	}
+}
+
 func TestGenerateDailyBriefPreservesProviderFailures(t *testing.T) {
 	tests := []struct {
 		name string
@@ -167,19 +199,29 @@ func TestGenerateDailyBriefPreservesProviderFailures(t *testing.T) {
 }
 
 type dailyBriefGeneratorStub struct {
-	draft dailyBriefDraft
-	err   error
-	calls int
-	input dailyBriefInput
+	provider string
+	model    string
+	draft    dailyBriefDraft
+	err      error
+	calls    int
+	input    dailyBriefInput
 }
 
 func (generator *dailyBriefGeneratorStub) Generate(
 	_ context.Context,
 	input dailyBriefInput,
-) (dailyBriefDraft, error) {
+) (dailyBriefGeneration, error) {
 	generator.calls++
 	generator.input = input
-	return generator.draft, generator.err
+	provider := generator.provider
+	if provider == "" {
+		provider = "openai"
+	}
+	model := generator.model
+	if model == "" {
+		model = "test-model"
+	}
+	return dailyBriefGeneration{provider: provider, model: model, draft: generator.draft}, generator.err
 }
 
 func dailyBriefGenerationInput() dailyBriefInput {

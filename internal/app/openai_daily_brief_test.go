@@ -82,8 +82,9 @@ func TestOpenAIDailyBriefGeneratorRequestsStructuredResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if !reflect.DeepEqual(got, wantDraft) {
-		t.Errorf("Generate() = %#v, want %#v", got, wantDraft)
+	want := dailyBriefGeneration{provider: "openai", model: "test-model", draft: wantDraft}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Generate() = %#v, want %#v", got, want)
 	}
 }
 
@@ -254,7 +255,7 @@ func TestOpenAIDailyBriefGeneratorRejectsInvalidResponses(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
 				t.Fatalf("Generate() error = %v, want error containing %q", err, test.contains)
 			}
-			if !reflect.DeepEqual(got, dailyBriefDraft{}) {
+			if !reflect.DeepEqual(got, dailyBriefGeneration{}) {
 				t.Errorf("Generate() = %#v, want zero value", got)
 			}
 		})
