@@ -13,7 +13,7 @@ import (
 	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|watchlist-events>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|unlink-watchlist-event|watchlist-events>"
 
 type command struct {
 	name                     string
@@ -27,6 +27,7 @@ type command struct {
 	watchlistQuery           watchlistQuery
 	watchlistsQuery          watchlistsQuery
 	linkWatchlistEvent       linkWatchlistEventCommand
+	unlinkWatchlistEvent     unlinkWatchlistEventCommand
 	watchlistEventsQuery     watchlistEventsQuery
 }
 
@@ -101,6 +102,12 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], linkWatchlistEvent: linkCommand}, nil
+	case "unlink-watchlist-event":
+		unlinkCommand, err := parseUnlinkWatchlistEventCommand(arguments[1:])
+		if err != nil {
+			return command{}, err
+		}
+		return command{name: arguments[0], unlinkWatchlistEvent: unlinkCommand}, nil
 	case "watchlist-events":
 		query, err := parseWatchlistEventsQuery(arguments[1:])
 		if err != nil {

@@ -230,6 +230,7 @@ type eventLinkRepositoryStub struct {
 	actor       string
 	limit       int
 	createCalls int
+	deleteCalls int
 	listCalls   int
 }
 
@@ -246,8 +247,10 @@ func (repository *eventLinkRepositoryStub) CreateEventLink(
 }
 
 func (repository *eventLinkRepositoryStub) DeleteEventLink(
-	_ context.Context, _, _, _ string,
+	_ context.Context, watchlistID, symbol, eventID string,
 ) error {
+	repository.deleteCalls++
+	repository.watchlistID, repository.symbol, repository.eventID = watchlistID, symbol, eventID
 	return repository.err
 }
 

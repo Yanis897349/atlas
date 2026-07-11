@@ -231,6 +231,10 @@ mise exec -- go run ./cmd/atlas link-watchlist-event \
   --symbol EURUSD \
   --event-id 00000000-0000-0000-0000-000000000002 \
   --actor analyst
+mise exec -- go run ./cmd/atlas unlink-watchlist-event \
+  --id 00000000-0000-0000-0000-000000000001 \
+  --symbol EURUSD \
+  --event-id 00000000-0000-0000-0000-000000000002
 mise exec -- go run ./cmd/atlas watchlist-events \
   --id 00000000-0000-0000-0000-000000000001 \
   --symbol EURUSD \
@@ -259,4 +263,6 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 
 `link-watchlist-event` atomically associates one watchlist instrument with one canonical economic event. It requires the watchlist and event UUIDs, an instrument symbol belonging to that watchlist, and an explicit audit actor; actors are trimmed and symbols are trimmed and canonicalized to uppercase. Missing references return a not-found error, duplicate associations return a uniqueness error, and failures emit no JSON. A successful command emits the complete immutable link, link audit metadata, and nested source-cited economic event with its persistence metadata.
 
-`watchlist-events` reads up to 100 linked economic events for one watchlist instrument. It canonicalizes the supplied symbol and emits complete links as a JSON array ordered by event time and event UUID, with an empty result represented as `[]`. Unlinking, automated relevance inference, market data, scheduling, HTTP delivery, and UI presentation remain deferred.
+`unlink-watchlist-event` atomically removes one exact association identified by its watchlist UUID, canonicalized instrument symbol, and economic-event UUID. Successful deletion emits no output, missing references or associations return a not-found error without output, and the watchlist, instrument, economic event, and unrelated links are preserved.
+
+`watchlist-events` reads up to 100 linked economic events for one watchlist instrument. It canonicalizes the supplied symbol and emits complete links as a JSON array ordered by event time and event UUID, with an empty result represented as `[]`. Bulk unlinking, automated relevance inference, market data, scheduling, HTTP delivery, and UI presentation remain deferred.

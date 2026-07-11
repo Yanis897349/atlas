@@ -196,6 +196,12 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			return fmt.Errorf("configure watchlist repository: %w", err)
 		}
 		return runLinkWatchlistEvent(ctx, repository, stdout, parsedCommand.linkWatchlistEvent)
+	case "unlink-watchlist-event":
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runUnlinkWatchlistEvent(ctx, repository, parsedCommand.unlinkWatchlistEvent)
 	case "watchlist-events":
 		repository, err := watchlistpostgres.NewRepository(pool)
 		if err != nil {
