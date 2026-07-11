@@ -226,6 +226,15 @@ mise exec -- go run ./cmd/atlas delete-watchlist \
   --id 00000000-0000-0000-0000-000000000001
 mise exec -- go run ./cmd/atlas watchlist --id 00000000-0000-0000-0000-000000000001
 mise exec -- go run ./cmd/atlas watchlists --limit 25
+mise exec -- go run ./cmd/atlas link-watchlist-event \
+  --id 00000000-0000-0000-0000-000000000001 \
+  --symbol EURUSD \
+  --event-id 00000000-0000-0000-0000-000000000002 \
+  --actor analyst
+mise exec -- go run ./cmd/atlas watchlist-events \
+  --id 00000000-0000-0000-0000-000000000001 \
+  --symbol EURUSD \
+  --limit 25
 ```
 
 `migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, `ingest-census`, `ingest-eurostat`, and `ingest-spglobal` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, national GDP estimates from the official BEA release schedule, retail-sales releases from the official Census calendar, current-year Euro-area quarterly GDP and monthly retail-sales releases from the official Eurostat calendar, and Eurozone flash PMI releases from the S&P Global PMI calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
@@ -246,4 +255,8 @@ mise exec -- go run ./cmd/atlas watchlists --limit 25
 
 `watchlist` reads one persisted watchlist definition by UUID and emits its complete definition, ordered symbols, and audit metadata as JSON. Invalid UUIDs are rejected before database setup, and a valid UUID that does not exist returns a not-found error without emitting JSON; the command never modifies the stored definition.
 
-`watchlists` reads up to 100 persisted watchlist definitions. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each definition's ordered symbols and audit metadata; an empty result is emitted as `[]`. Personalization, event linkage, market data, scheduling, HTTP delivery, and UI presentation remain deferred.
+`watchlists` reads up to 100 persisted watchlist definitions. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each definition's ordered symbols and audit metadata; an empty result is emitted as `[]`.
+
+`link-watchlist-event` atomically associates one watchlist instrument with one canonical economic event. It requires the watchlist and event UUIDs, an instrument symbol belonging to that watchlist, and an explicit audit actor; actors are trimmed and symbols are trimmed and canonicalized to uppercase. Missing references return a not-found error, duplicate associations return a uniqueness error, and failures emit no JSON. A successful command emits the complete immutable link, link audit metadata, and nested source-cited economic event with its persistence metadata.
+
+`watchlist-events` reads up to 100 linked economic events for one watchlist instrument. It canonicalizes the supplied symbol and emits complete links as a JSON array ordered by event time and event UUID, with an empty result represented as `[]`. Unlinking, automated relevance inference, market data, scheduling, HTTP delivery, and UI presentation remain deferred.

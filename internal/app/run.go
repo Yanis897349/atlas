@@ -190,6 +190,18 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			return fmt.Errorf("configure watchlist repository: %w", err)
 		}
 		return runWatchlists(ctx, repository, stdout, parsedCommand.watchlistsQuery)
+	case "link-watchlist-event":
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runLinkWatchlistEvent(ctx, repository, stdout, parsedCommand.linkWatchlistEvent)
+	case "watchlist-events":
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runWatchlistEvents(ctx, repository, stdout, parsedCommand.watchlistEventsQuery)
 	default:
 		panic("validated command is not handled")
 	}
