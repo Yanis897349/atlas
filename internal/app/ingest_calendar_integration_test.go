@@ -33,6 +33,7 @@ func TestRunIngestsCalendarSourcesIdempotently(t *testing.T) {
 			if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
 				t.Fatalf("Run(migrate) error = %v", err)
 			}
+			stdout.Reset()
 			for range 2 {
 				if err := Run(t.Context(), []string{test.command}, dependencies); err != nil {
 					t.Fatalf("Run(%s) error = %v", test.command, err)

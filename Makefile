@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-check lint mod-check test test-race check ci
+.PHONY: fmt fmt-check lint mod-check test test-race check ci db-up db-down db-reset
 
 fmt:
 	gofmt -w .
@@ -25,3 +25,13 @@ test-race:
 check: fmt-check lint mod-check test
 
 ci: check test-race
+
+db-up:
+	docker compose up --detach --wait postgres
+
+db-down:
+	docker compose down
+
+db-reset:
+	docker compose down --volumes --remove-orphans
+	docker compose up --detach --wait postgres

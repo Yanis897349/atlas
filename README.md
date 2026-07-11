@@ -141,18 +141,32 @@ Source Scoring           Topic Classification
 
 ## Development
 
-Atlas uses Go 1.26.5, pinned in `.mise.toml` and `go.mod`. Install and activate it with mise, then run the complete local quality suite:
+Atlas uses Go 1.26.5, pinned in `.mise.toml` and `go.mod`. Install and activate the pinned tools with mise:
 
 ```sh
 mise install
-mise exec -- make ci
 ```
 
 During development, run `mise exec -- make fmt` to format Go files and `mise exec -- make check` after every change. The check target verifies formatting, runs the pinned golangci-lint suite, checks that the module files are tidy, and runs the tests. The CI target adds the race detector. GitHub Actions enforces the same checks on pushes and pull requests.
 
 The initial supported source is the [InvestingLive RSS feed](https://investinglive.com/feed/). The RSS 2.0 adapter normalizes source items, and the PostgreSQL ingestion repository persists them using the source name and stable source-item identifier as an idempotency key. A later retrieval may correct stored metadata, while retries and older retrievals leave the existing row unchanged. Source item identity is a SHA-256 digest of the configured source and the entry GUID, falling back to the original URL when no GUID is present; exact repeated identities within one response are emitted once.
 
-PostgreSQL integration tests run when `ATLAS_TEST_DATABASE_URL` is set. The test account must be allowed to create isolated schemas; CI provisions a PostgreSQL service and runs these tests automatically. Use `.env.example` as the reference for local configuration and export its values before running the tests; Go does not load `.env` files automatically.
+PostgreSQL integration tests run when `ATLAS_TEST_DATABASE_URL` is set. The test account must be allowed to create isolated schemas; CI provisions a PostgreSQL service and runs these tests automatically.
+
+### Run PostgreSQL locally
+
+Docker Compose provides PostgreSQL 17 with separate `atlas` application and `atlas_test` integration-test databases. Start it, copy the development configuration once, and export that configuration before running commands so the PostgreSQL-backed tests are not skipped:
+
+```sh
+mise exec -- make db-up
+cp -n .env.example .env
+set -a
+. ./.env
+set +a
+mise exec -- make ci
+```
+
+`db-down` stops PostgreSQL while preserving its local volume. `db-reset` permanently deletes that volume, recreates both disposable development databases, and starts PostgreSQL again. Neither the Go application nor Make loads `.env` automatically, so export it in each new shell before running application commands or integration tests.
 
 ### Run one ingestion cycle
 
