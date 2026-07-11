@@ -33,7 +33,7 @@ func TestRunValidatesCommandBeforeConfiguration(t *testing.T) {
 }
 
 func TestRunRecognizesCommandsBeforeRequiringApplicationDatabaseURL(t *testing.T) {
-	for _, command := range []string{"migrate", "ingest-rss", "ingest-bls", "ingest-fed"} {
+	for _, command := range []string{"migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb"} {
 		t.Run(command, func(t *testing.T) {
 			err := Run(t.Context(), []string{command}, Dependencies{
 				Getenv: func(string) string { return "" },

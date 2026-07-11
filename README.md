@@ -164,6 +164,7 @@ mise exec -- go run ./cmd/atlas migrate
 mise exec -- go run ./cmd/atlas ingest-rss
 mise exec -- go run ./cmd/atlas ingest-bls
 mise exec -- go run ./cmd/atlas ingest-fed
+mise exec -- go run ./cmd/atlas ingest-ecb
 ```
 
-`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls` and `ingest-fed` do the same for supported releases from the official BLS calendar and regular meetings from the official Federal Reserve FOMC calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
+`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, and `ingest-ecb` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, and monetary policy meetings from the official ECB calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.

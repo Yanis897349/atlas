@@ -30,6 +30,7 @@ type Dependencies struct {
 	RSSFeedURL    string
 	RSSWait       func(context.Context, time.Duration) error
 	BLS           CalendarSourceDependencies
+	ECB           CalendarSourceDependencies
 	Fed           CalendarSourceDependencies
 	Stdout        io.Writer
 }
@@ -37,10 +38,10 @@ type Dependencies struct {
 // Run executes one Atlas command.
 func Run(ctx context.Context, arguments []string, dependencies Dependencies) error {
 	if len(arguments) != 1 {
-		return errors.New("usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed>")
+		return errors.New("usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb>")
 	}
-	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" && arguments[0] != "ingest-bls" && arguments[0] != "ingest-fed" {
-		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed>", arguments[0])
+	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" && arguments[0] != "ingest-bls" && arguments[0] != "ingest-fed" && arguments[0] != "ingest-ecb" {
+		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb>", arguments[0])
 	}
 
 	getenv := dependencies.Getenv
@@ -78,6 +79,8 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return runBLSIngestion(ctx, pool, dependencies, stdout)
 	case "ingest-fed":
 		return runFedIngestion(ctx, pool, dependencies, stdout)
+	case "ingest-ecb":
+		return runECBIngestion(ctx, pool, dependencies, stdout)
 	default:
 		panic("validated command is not handled")
 	}
