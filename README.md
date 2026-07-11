@@ -196,6 +196,16 @@ mise exec -- go run ./cmd/atlas daily-brief-input \
   --event-from 2026-07-11T12:00:00Z \
   --event-to 2026-07-18T12:00:00Z \
   --upcoming-event-limit 25
+export ATLAS_OPENAI_API_KEY='replace-with-an-api-key'
+export ATLAS_OPENAI_MODEL='replace-with-a-responses-api-model'
+mise exec -- go run ./cmd/atlas daily-brief \
+  --region united_states \
+  --publication-from 2026-07-10T12:00:00Z \
+  --publication-to 2026-07-11T12:00:00Z \
+  --source-record-limit 50 \
+  --event-from 2026-07-11T12:00:00Z \
+  --event-to 2026-07-18T12:00:00Z \
+  --upcoming-event-limit 25
 ```
 
 `migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, `ingest-census`, `ingest-eurostat`, and `ingest-spglobal` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, national GDP estimates from the official BEA release schedule, retail-sales releases from the official Census calendar, current-year Euro-area quarterly GDP and monthly retail-sales releases from the official Eurostat calendar, and Eurozone flash PMI releases from the S&P Global PMI calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
@@ -203,3 +213,5 @@ mise exec -- go run ./cmd/atlas daily-brief-input \
 `upcoming-events` reads one supported region (`united_states` or `eurozone`) over an inclusive RFC 3339 time window. Its limit must be from 1 through 100. The command emits a JSON array ordered by scheduled time and event ID, retaining each event's source identity and citation URL; it does not ingest or modify records.
 
 `daily-brief-input` reads recent source records and region-specific upcoming events over separate inclusive RFC 3339 windows. The source-record and upcoming-event limits are independent and must each be from 1 through 100. The command emits a deterministic JSON envelope containing the UTC query windows, newest-first source records, and chronologically ordered events with their source identities and citation URLs; it does not generate prose, call an AI provider, or modify records.
+
+`daily-brief` accepts the same windows and limits, requires `ATLAS_OPENAI_API_KEY` and `ATLAS_OPENAI_MODEL`, and sends the assembled deterministic input to the OpenAI Responses API. It emits one JSON object containing ordered generated sections and canonical source-record or upcoming-event citations resolved from PostgreSQL; provider-supplied URLs are never trusted. The command is read-only, does not persist generated content, and performs one bounded provider request without retries. Scheduling, HTTP delivery, and UI presentation are not part of this command.

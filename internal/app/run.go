@@ -26,18 +26,21 @@ type CalendarSourceDependencies struct {
 
 // Dependencies contains process-bound dependencies and deterministic test seams.
 type Dependencies struct {
-	Getenv        func(string) string
-	RSSHTTPClient rss.HTTPClient
-	RSSFeedURL    string
-	RSSWait       func(context.Context, time.Duration) error
-	BEA           CalendarSourceDependencies
-	BLS           CalendarSourceDependencies
-	Census        CalendarSourceDependencies
-	ECB           CalendarSourceDependencies
-	Eurostat      CalendarSourceDependencies
-	Fed           CalendarSourceDependencies
-	SPGlobal      CalendarSourceDependencies
-	Stdout        io.Writer
+	Getenv              func(string) string
+	RSSHTTPClient       rss.HTTPClient
+	RSSFeedURL          string
+	RSSWait             func(context.Context, time.Duration) error
+	BEA                 CalendarSourceDependencies
+	BLS                 CalendarSourceDependencies
+	Census              CalendarSourceDependencies
+	ECB                 CalendarSourceDependencies
+	Eurostat            CalendarSourceDependencies
+	Fed                 CalendarSourceDependencies
+	SPGlobal            CalendarSourceDependencies
+	OpenAIHTTPClient    OpenAIHTTPClient
+	OpenAIEndpoint      string
+	OpenAIRequestBudget time.Duration
+	Stdout              io.Writer
 }
 
 // Run executes one Atlas command.
@@ -54,6 +57,14 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 	config, err := databaseConfig(getenv("ATLAS_DATABASE_URL"))
 	if err != nil {
 		return fmt.Errorf("configure PostgreSQL: %w", err)
+	}
+
+	var dailyBriefGenerator dailyBriefGenerator
+	if parsedCommand.name == "daily-brief" {
+		dailyBriefGenerator, err = configureOpenAIDailyBriefGenerator(getenv, dependencies)
+		if err != nil {
+			return err
+		}
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
@@ -106,6 +117,23 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			ctx,
 			sourceRepository,
 			eventRepository,
+			stdout,
+			parsedCommand.dailyBriefInputQuery,
+		)
+	case "daily-brief":
+		sourceRepository, err := ingestionpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure source record repository: %w", err)
+		}
+		eventRepository, err := calendarpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure economic event repository: %w", err)
+		}
+		return runDailyBrief(
+			ctx,
+			sourceRepository,
+			eventRepository,
+			dailyBriefGenerator,
 			stdout,
 			parsedCommand.dailyBriefInputQuery,
 		)

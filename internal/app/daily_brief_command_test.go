@@ -59,43 +59,47 @@ func TestParseDailyBriefInputQueryAcceptsEqualInclusiveWindows(t *testing.T) {
 }
 
 func TestRunRejectsInvalidDailyBriefInputArgumentsBeforeDatabaseSetup(t *testing.T) {
-	valid := validDailyBriefInputArguments()
 	tests := []struct {
-		name      string
-		arguments []string
-		contains  string
+		name     string
+		update   func([]string) []string
+		contains string
 	}{
-		{name: "missing region", arguments: withoutFlag(valid, "--region"), contains: "--region is required"},
-		{name: "missing publication from", arguments: withoutFlag(valid, "--publication-from"), contains: "--publication-from is required"},
-		{name: "missing publication to", arguments: withoutFlag(valid, "--publication-to"), contains: "--publication-to is required"},
-		{name: "missing source limit", arguments: withoutFlag(valid, "--source-record-limit"), contains: "--source-record-limit is required"},
-		{name: "missing event from", arguments: withoutFlag(valid, "--event-from"), contains: "--event-from is required"},
-		{name: "missing event to", arguments: withoutFlag(valid, "--event-to"), contains: "--event-to is required"},
-		{name: "missing event limit", arguments: withoutFlag(valid, "--upcoming-event-limit"), contains: "--upcoming-event-limit is required"},
-		{name: "unknown flag", arguments: append(append([]string{}, valid...), "--format", "yaml"), contains: "flag provided but not defined"},
-		{name: "positional argument", arguments: append(append([]string{}, valid...), "extra"), contains: "unexpected positional arguments"},
-		{name: "unsupported region", arguments: replaceFlag(valid, "--region", "asia"), contains: "unsupported region"},
-		{name: "malformed publication from", arguments: replaceFlag(valid, "--publication-from", "today"), contains: "--publication-from must be RFC3339"},
-		{name: "malformed publication to", arguments: replaceFlag(valid, "--publication-to", "today"), contains: "--publication-to must be RFC3339"},
-		{name: "reversed publication window", arguments: replaceFlag(valid, "--publication-to", "2026-07-11T07:59:59Z"), contains: "--publication-to must not be before --publication-from"},
-		{name: "zero source limit", arguments: replaceFlag(valid, "--source-record-limit", "0"), contains: "--source-record-limit must be between 1 and 100"},
-		{name: "source limit above maximum", arguments: replaceFlag(valid, "--source-record-limit", "101"), contains: "--source-record-limit must be between 1 and 100"},
-		{name: "malformed event from", arguments: replaceFlag(valid, "--event-from", "today"), contains: "--event-from must be RFC3339"},
-		{name: "malformed event to", arguments: replaceFlag(valid, "--event-to", "today"), contains: "--event-to must be RFC3339"},
-		{name: "reversed event window", arguments: replaceFlag(valid, "--event-to", "2026-07-12T07:59:59Z"), contains: "--event-to must not be before --event-from"},
-		{name: "zero event limit", arguments: replaceFlag(valid, "--upcoming-event-limit", "0"), contains: "--upcoming-event-limit must be between 1 and 100"},
-		{name: "event limit above maximum", arguments: replaceFlag(valid, "--upcoming-event-limit", "101"), contains: "--upcoming-event-limit must be between 1 and 100"},
+		{name: "missing region", update: func(valid []string) []string { return withoutFlag(valid, "--region") }, contains: "--region is required"},
+		{name: "missing publication from", update: func(valid []string) []string { return withoutFlag(valid, "--publication-from") }, contains: "--publication-from is required"},
+		{name: "missing publication to", update: func(valid []string) []string { return withoutFlag(valid, "--publication-to") }, contains: "--publication-to is required"},
+		{name: "missing source limit", update: func(valid []string) []string { return withoutFlag(valid, "--source-record-limit") }, contains: "--source-record-limit is required"},
+		{name: "missing event from", update: func(valid []string) []string { return withoutFlag(valid, "--event-from") }, contains: "--event-from is required"},
+		{name: "missing event to", update: func(valid []string) []string { return withoutFlag(valid, "--event-to") }, contains: "--event-to is required"},
+		{name: "missing event limit", update: func(valid []string) []string { return withoutFlag(valid, "--upcoming-event-limit") }, contains: "--upcoming-event-limit is required"},
+		{name: "unknown flag", update: func(valid []string) []string { return append(valid, "--format", "yaml") }, contains: "flag provided but not defined"},
+		{name: "positional argument", update: func(valid []string) []string { return append(valid, "extra") }, contains: "unexpected positional arguments"},
+		{name: "unsupported region", update: func(valid []string) []string { return replaceFlag(valid, "--region", "asia") }, contains: "unsupported region"},
+		{name: "malformed publication from", update: func(valid []string) []string { return replaceFlag(valid, "--publication-from", "today") }, contains: "--publication-from must be RFC3339"},
+		{name: "malformed publication to", update: func(valid []string) []string { return replaceFlag(valid, "--publication-to", "today") }, contains: "--publication-to must be RFC3339"},
+		{name: "reversed publication window", update: func(valid []string) []string { return replaceFlag(valid, "--publication-to", "2026-07-11T07:59:59Z") }, contains: "--publication-to must not be before --publication-from"},
+		{name: "zero source limit", update: func(valid []string) []string { return replaceFlag(valid, "--source-record-limit", "0") }, contains: "--source-record-limit must be between 1 and 100"},
+		{name: "source limit above maximum", update: func(valid []string) []string { return replaceFlag(valid, "--source-record-limit", "101") }, contains: "--source-record-limit must be between 1 and 100"},
+		{name: "malformed event from", update: func(valid []string) []string { return replaceFlag(valid, "--event-from", "today") }, contains: "--event-from must be RFC3339"},
+		{name: "malformed event to", update: func(valid []string) []string { return replaceFlag(valid, "--event-to", "today") }, contains: "--event-to must be RFC3339"},
+		{name: "reversed event window", update: func(valid []string) []string { return replaceFlag(valid, "--event-to", "2026-07-12T07:59:59Z") }, contains: "--event-to must not be before --event-from"},
+		{name: "zero event limit", update: func(valid []string) []string { return replaceFlag(valid, "--upcoming-event-limit", "0") }, contains: "--upcoming-event-limit must be between 1 and 100"},
+		{name: "event limit above maximum", update: func(valid []string) []string { return replaceFlag(valid, "--upcoming-event-limit", "101") }, contains: "--upcoming-event-limit must be between 1 and 100"},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dependencies := Dependencies{Getenv: func(string) string {
-				t.Fatal("database configuration read for invalid command arguments")
-				return ""
-			}}
-			err := Run(t.Context(), test.arguments, dependencies)
-			if err == nil || !strings.Contains(err.Error(), test.contains) {
-				t.Fatalf("Run() error = %v, want error containing %q", err, test.contains)
+	for _, commandName := range []string{"daily-brief-input", "daily-brief"} {
+		t.Run(commandName, func(t *testing.T) {
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					dependencies := Dependencies{Getenv: func(string) string {
+						t.Fatal("configuration read for invalid command arguments")
+						return ""
+					}}
+					arguments := test.update(validDailyBriefArguments(commandName))
+					err := Run(t.Context(), arguments, dependencies)
+					if err == nil || !strings.Contains(err.Error(), test.contains) {
+						t.Fatalf("Run() error = %v, want error containing %q", err, test.contains)
+					}
+				})
 			}
 		})
 	}
@@ -192,8 +196,12 @@ func TestRunDailyBriefInputReportsWriterFailure(t *testing.T) {
 }
 
 func validDailyBriefInputArguments() []string {
+	return validDailyBriefArguments("daily-brief-input")
+}
+
+func validDailyBriefArguments(commandName string) []string {
 	return []string{
-		"daily-brief-input",
+		commandName,
 		"--region", "eurozone",
 		"--publication-from", "2026-07-11T08:00:00Z",
 		"--publication-to", "2026-07-11T12:00:00Z",

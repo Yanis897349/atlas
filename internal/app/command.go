@@ -12,7 +12,7 @@ import (
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief>"
 
 type command struct {
 	name                     string
@@ -40,6 +40,12 @@ func parseCommand(arguments []string) (command, error) {
 		return command{name: arguments[0], upcomingEventsQuery: query}, nil
 	case "daily-brief-input":
 		query, err := parseDailyBriefInputQuery(arguments[1:])
+		if err != nil {
+			return command{}, err
+		}
+		return command{name: arguments[0], dailyBriefInputQuery: query}, nil
+	case "daily-brief":
+		query, err := parseDailyBriefQuery(arguments[0], arguments[1:])
 		if err != nil {
 			return command{}, err
 		}

@@ -24,14 +24,15 @@ const (
 	maxOpenAIOutputTokens          = 4096
 )
 
-type openAIHTTPClient interface {
+// OpenAIHTTPClient executes OpenAI Responses API requests.
+type OpenAIHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
 type openAIDailyBriefGeneratorConfig struct {
 	APIKey        string
 	Model         string
-	Client        openAIHTTPClient
+	Client        OpenAIHTTPClient
 	Endpoint      string
 	RequestBudget time.Duration
 }
@@ -39,7 +40,7 @@ type openAIDailyBriefGeneratorConfig struct {
 type openAIDailyBriefGenerator struct {
 	apiKey        string
 	model         string
-	client        openAIHTTPClient
+	client        OpenAIHTTPClient
 	endpoint      string
 	requestBudget time.Duration
 }
