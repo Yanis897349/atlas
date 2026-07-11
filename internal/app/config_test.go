@@ -32,11 +32,15 @@ func TestRunValidatesCommandBeforeConfiguration(t *testing.T) {
 	}
 }
 
-func TestRunRequiresApplicationDatabaseURL(t *testing.T) {
-	err := Run(t.Context(), []string{"migrate"}, Dependencies{
-		Getenv: func(string) string { return "" },
-	})
-	if err == nil {
-		t.Fatal("Run() error = nil, want missing ATLAS_DATABASE_URL error")
+func TestRunRecognizesCommandsBeforeRequiringApplicationDatabaseURL(t *testing.T) {
+	for _, command := range []string{"migrate", "ingest-rss", "ingest-bls"} {
+		t.Run(command, func(t *testing.T) {
+			err := Run(t.Context(), []string{command}, Dependencies{
+				Getenv: func(string) string { return "" },
+			})
+			if err == nil || err.Error() != "configure PostgreSQL: ATLAS_DATABASE_URL is required" {
+				t.Fatalf("Run(%q) error = %v, want missing ATLAS_DATABASE_URL error", command, err)
+			}
+		})
 	}
 }

@@ -21,9 +21,9 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 	t.Cleanup(feed.Close)
 
 	dependencies := Dependencies{
-		Getenv:     applicationDatabaseEnv(database.URL),
-		HTTPClient: feed.Client(),
-		FeedURL:    feed.URL,
+		Getenv:        applicationDatabaseEnv(database.URL),
+		RSSHTTPClient: feed.Client(),
+		RSSFeedURL:    feed.URL,
 	}
 	for range 2 {
 		if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
@@ -65,8 +65,8 @@ func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
 		}))
 		t.Cleanup(feed.Close)
 
-		dependencies.HTTPClient = feed.Client()
-		dependencies.FeedURL = feed.URL
+		dependencies.RSSHTTPClient = feed.Client()
+		dependencies.RSSFeedURL = feed.URL
 		err := Run(t.Context(), []string{"ingest-rss"}, dependencies)
 		if err == nil || !strings.Contains(err.Error(), "ingest InvestingLive RSS: fetch source records") {
 			t.Fatalf("Run(ingest-rss) error = %v, want contextual fetch error", err)
@@ -82,8 +82,8 @@ func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
 		t.Cleanup(feed.Close)
 
 		ctx, cancel := context.WithCancel(t.Context())
-		dependencies.HTTPClient = feed.Client()
-		dependencies.FeedURL = feed.URL
+		dependencies.RSSHTTPClient = feed.Client()
+		dependencies.RSSFeedURL = feed.URL
 		result := make(chan error, 1)
 		go func() {
 			result <- Run(ctx, []string{"ingest-rss"}, dependencies)

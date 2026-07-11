@@ -9,31 +9,32 @@ import (
 	"os"
 	"time"
 
+	"github.com/Yanis897349/atlas/internal/calendar/bls"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
-	"github.com/Yanis897349/atlas/internal/ingestion"
-	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const ingestionActor = "atlas-rss-ingestion"
-
 // Dependencies contains process-bound dependencies and deterministic test seams.
 type Dependencies struct {
-	Getenv     func(string) string
-	HTTPClient rss.HTTPClient
-	FeedURL    string
-	RSSWait    func(context.Context, time.Duration) error
-	Stdout     io.Writer
+	Getenv           func(string) string
+	RSSHTTPClient    rss.HTTPClient
+	RSSFeedURL       string
+	RSSWait          func(context.Context, time.Duration) error
+	BLSHTTPClient    bls.HTTPClient
+	BLSCalendarURL   string
+	BLSNow           func() time.Time
+	BLSRequestBudget time.Duration
+	Stdout           io.Writer
 }
 
 // Run executes one Atlas command.
 func Run(ctx context.Context, arguments []string, dependencies Dependencies) error {
 	if len(arguments) != 1 {
-		return errors.New("usage: atlas <migrate|ingest-rss>")
+		return errors.New("usage: atlas <migrate|ingest-rss|ingest-bls>")
 	}
-	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" {
-		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss>", arguments[0])
+	if arguments[0] != "migrate" && arguments[0] != "ingest-rss" && arguments[0] != "ingest-bls" {
+		return fmt.Errorf("unknown command %q; usage: atlas <migrate|ingest-rss|ingest-bls>", arguments[0])
 	}
 
 	getenv := dependencies.Getenv
@@ -67,39 +68,9 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		return nil
 	case "ingest-rss":
 		return runRSSIngestion(ctx, pool, dependencies, stdout)
+	case "ingest-bls":
+		return runBLSIngestion(ctx, pool, dependencies, stdout)
 	default:
 		panic("validated command is not handled")
 	}
-}
-
-func runRSSIngestion(
-	ctx context.Context,
-	pool *pgxpool.Pool,
-	dependencies Dependencies,
-	stdout io.Writer,
-) error {
-	feedURL := dependencies.FeedURL
-	if feedURL == "" {
-		feedURL = rss.InvestingLiveFeedURL
-	}
-	adapter, err := rss.NewAdapter(rss.Config{
-		Source:  rss.InvestingLiveSource,
-		FeedURL: feedURL,
-		Client:  dependencies.HTTPClient,
-		Wait:    dependencies.RSSWait,
-	})
-	if err != nil {
-		return fmt.Errorf("configure InvestingLive RSS: %w", err)
-	}
-	repository, err := ingestionpostgres.NewRepository(pool)
-	if err != nil {
-		return fmt.Errorf("configure ingestion repository: %w", err)
-	}
-
-	count, err := ingestion.Ingest(ctx, adapter, repository, ingestionActor)
-	if err != nil {
-		return fmt.Errorf("ingest InvestingLive RSS: %w", err)
-	}
-	_, _ = fmt.Fprintf(stdout, "ingested %d InvestingLive RSS records\n", count)
-	return nil
 }

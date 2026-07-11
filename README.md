@@ -154,7 +154,7 @@ The initial supported source is the [InvestingLive RSS feed](https://investingli
 
 PostgreSQL integration tests run when `ATLAS_TEST_DATABASE_URL` is set. The test account must be allowed to create isolated schemas; CI provisions a PostgreSQL service and runs these tests automatically. Use `.env.example` as the reference for local configuration and export its values before running the tests; Go does not load `.env` files automatically.
 
-### Run one RSS ingestion cycle
+### Run one ingestion cycle
 
 Atlas application commands require `ATLAS_DATABASE_URL`. Keep this application database separate from `ATLAS_TEST_DATABASE_URL`, which integration tests isolate and clean up. Apply migrations explicitly before ingestion:
 
@@ -162,6 +162,7 @@ Atlas application commands require `ATLAS_DATABASE_URL`. Keep this application d
 export ATLAS_DATABASE_URL='postgres://postgres:postgres@localhost:5432/atlas?sslmode=disable'
 mise exec -- go run ./cmd/atlas migrate
 mise exec -- go run ./cmd/atlas ingest-rss
+mise exec -- go run ./cmd/atlas ingest-bls
 ```
 
-`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle and then exits; repeated cycles update newer retrieval metadata without creating duplicate source records. Scheduling and continuous workers are intentionally not part of this command.
+`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls` does the same for supported releases from the official BLS calendar. Both ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
