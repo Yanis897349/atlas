@@ -28,6 +28,7 @@ func TestRepositoryValidatesSimilarityQueryBeforePostgreSQL(t *testing.T) {
 		{name: "provider", provider: " ", model: "model", queryVector: []float32{1}, limit: 1, contains: "provider is required"},
 		{name: "model", provider: "provider", model: "\t", queryVector: []float32{1}, limit: 1, contains: "model is required"},
 		{name: "vector", provider: "provider", model: "model", limit: 1, contains: "query vector is required"},
+		{name: "zero norm", provider: "provider", model: "model", queryVector: []float32{0, 0}, limit: 1, contains: "query vector must have non-zero norm"},
 		{name: "NaN", provider: "provider", model: "model", queryVector: []float32{float32(math.NaN())}, limit: 1, contains: "value 0 must be finite"},
 		{name: "positive infinity", provider: "provider", model: "model", queryVector: []float32{1, float32(math.Inf(1))}, limit: 1, contains: "value 1 must be finite"},
 		{name: "negative infinity", provider: "provider", model: "model", queryVector: []float32{float32(math.Inf(-1))}, limit: 1, contains: "value 0 must be finite"},

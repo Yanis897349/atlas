@@ -40,6 +40,7 @@ func TestRepositoryValidatesEmbeddingBatchBeforePostgreSQL(t *testing.T) {
 		{name: "provider", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Provider = "\t" }), actor: "actor", contains: "provider is required"},
 		{name: "model", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Model = " " }), actor: "actor", contains: "model is required"},
 		{name: "vector", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector = nil }), actor: "actor", contains: "vector is required"},
+		{name: "zero norm", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector = []float32{0, 0} }), actor: "actor", contains: "vector must have non-zero norm"},
 		{name: "dimension", embeddings: updateEmbedding(valid, 1, func(value *search.SourceRecordEmbedding) { value.Vector = []float32{0.3} }), actor: "actor", contains: "does not match batch dimension"},
 		{name: "NaN", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector[0] = float32(math.NaN()) }), actor: "actor", contains: "must be finite"},
 		{name: "infinity", embeddings: updateEmbedding(valid, 1, func(value *search.SourceRecordEmbedding) { value.Vector[1] = float32(math.Inf(1)) }), actor: "actor", contains: "must be finite"},

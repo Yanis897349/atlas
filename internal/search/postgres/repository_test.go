@@ -13,6 +13,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 	"github.com/Yanis897349/atlas/internal/search"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -192,7 +193,7 @@ func TestEmbeddingMigrationsAreRepeatableAndCreateRequiredSchema(t *testing.T) {
 		t.Fatalf("repeat Migrate() error = %v", err)
 	}
 
-	var extension, table, provenanceIndex string
+	var extension, table, provenanceIndex, nonzeroConstraint string
 	if err := pool.QueryRow(t.Context(), `SELECT extname FROM pg_extension WHERE extname = 'vector'`).Scan(&extension); err != nil {
 		t.Fatalf("load vector extension: %v", err)
 	}
@@ -202,10 +203,37 @@ func TestEmbeddingMigrationsAreRepeatableAndCreateRequiredSchema(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), `SELECT to_regclass('ix_source_record_embeddings_provider_model')::text`).Scan(&provenanceIndex); err != nil {
 		t.Fatalf("load embedding provenance index: %v", err)
 	}
-	if extension != "vector" || table != "source_record_embeddings" ||
-		provenanceIndex != "ix_source_record_embeddings_provider_model" {
-		t.Errorf("migration schema = (%q, %q, %q)", extension, table, provenanceIndex)
+	if err := pool.QueryRow(t.Context(), `
+SELECT conname
+FROM pg_constraint
+WHERE conrelid = 'source_record_embeddings'::regclass
+  AND conname = 'chk_source_record_embeddings_embedding_nonzero'
+`).Scan(&nonzeroConstraint); err != nil {
+		t.Fatalf("load embedding non-zero constraint: %v", err)
 	}
+	if extension != "vector" || table != "source_record_embeddings" ||
+		provenanceIndex != "ix_source_record_embeddings_provider_model" ||
+		nonzeroConstraint != "chk_source_record_embeddings_embedding_nonzero" {
+		t.Errorf("migration schema = (%q, %q, %q, %q)", extension, table, provenanceIndex, nonzeroConstraint)
+	}
+}
+
+func TestEmbeddingMigrationRejectsZeroNormVectors(t *testing.T) {
+	pool := openTestPool(t)
+	recordID := insertSourceRecord(t, pool, "embedding-zero-norm")
+
+	_, err := pool.Exec(t.Context(), `
+INSERT INTO source_record_embeddings (
+    source_record_id, provider, model, embedding, created_by, updated_by
+)
+VALUES ($1, 'openai', 'model-a', '[0,0]'::public.vector, 'test', 'test')
+`, recordID)
+	var postgresError *pgconn.PgError
+	if !errors.As(err, &postgresError) || postgresError.Code != "23514" ||
+		postgresError.ConstraintName != "chk_source_record_embeddings_embedding_nonzero" {
+		t.Fatalf("zero-norm embedding error = %v, want non-zero constraint violation", err)
+	}
+	assertEmbeddingCount(t, pool, 0)
 }
 
 type storedEmbedding struct {
