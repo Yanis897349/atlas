@@ -79,4 +79,4 @@ ON CONFLICT (source_record_id, provider, model) DO UPDATE
 SET embedding = EXCLUDED.embedding,
     updated_at = statement_timestamp(),
     updated_by = EXCLUDED.updated_by
-WHERE source_record_embeddings.embedding IS DISTINCT FROM EXCLUDED.embedding`
+WHERE source_record_embeddings.embedding::text IS DISTINCT FROM EXCLUDED.embedding::text`

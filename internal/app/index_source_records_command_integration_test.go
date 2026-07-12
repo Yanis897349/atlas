@@ -35,12 +35,12 @@ func TestRunIndexesSourceRecordsEndToEnd(t *testing.T) {
 	windowStart := time.Date(2026, time.July, 12, 8, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(2 * time.Hour)
 	records := []ingestion.SourceRecord{
-		indexCommandSourceRecord("before", "Before", windowStart.Add(-time.Nanosecond)),
+		indexCommandSourceRecord("before", "Before", windowStart.Add(-time.Microsecond)),
 		indexCommandSourceRecord("start", "  Exact start title  ", windowStart),
 		indexCommandSourceRecord("tie-b", "Tie title B", windowStart.Add(time.Hour)),
 		indexCommandSourceRecord("tie-a", "Tie title A", windowStart.Add(time.Hour)),
 		indexCommandSourceRecord("end", "Exact end title", windowEnd),
-		indexCommandSourceRecord("after", "After", windowEnd.Add(time.Nanosecond)),
+		indexCommandSourceRecord("after", "After", windowEnd.Add(time.Microsecond)),
 	}
 	storedByItemID := make(map[string]ingestion.StoredSourceRecord, len(records))
 	for _, record := range records {
