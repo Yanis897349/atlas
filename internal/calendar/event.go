@@ -14,6 +14,9 @@ const (
 // MaxUpcomingEventsLimit bounds one upcoming-event retrieval.
 const MaxUpcomingEventsLimit = 100
 
+// MaxWatchlistEventCandidatesLimit bounds one watchlist event-candidate retrieval.
+const MaxWatchlistEventCandidatesLimit = 100
+
 // EventType classifies an economic event by the indicator or decision it represents.
 type EventType string
 
