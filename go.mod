@@ -7,6 +7,7 @@ toolchain go1.26.5
 require (
 	github.com/arran4/golang-ical v0.3.5
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/pgvector/pgvector-go v0.4.0
 	golang.org/x/net v0.57.0
 )
 

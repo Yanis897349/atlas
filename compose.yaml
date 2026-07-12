@@ -2,7 +2,7 @@ name: atlas
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:0.8.2-pg17-bookworm
     environment:
       POSTGRES_DB: atlas
       POSTGRES_PASSWORD: postgres
