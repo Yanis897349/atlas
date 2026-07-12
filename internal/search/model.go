@@ -1,4 +1,4 @@
-// Package search defines source-record embedding boundaries.
+// Package search defines source-record embedding and semantic retrieval boundaries.
 package search
 
 import "context"

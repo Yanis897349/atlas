@@ -1,6 +1,10 @@
 package search
 
-import "github.com/Yanis897349/atlas/internal/ingestion"
+import (
+	"context"
+
+	"github.com/Yanis897349/atlas/internal/ingestion"
+)
 
 // MaxSimilarSourceRecordsLimit bounds one similar-source-record retrieval.
 const MaxSimilarSourceRecordsLimit = 100
@@ -11,4 +15,9 @@ type SimilarSourceRecord struct {
 	Provider       string
 	Model          string
 	CosineDistance float64
+}
+
+// SimilarSourceRecordReader retrieves canonical source records ranked by embedding distance.
+type SimilarSourceRecordReader interface {
+	SimilarSourceRecords(context.Context, string, string, []float32, int) ([]SimilarSourceRecord, error)
 }
