@@ -39,6 +39,9 @@ var sourceRecordEmbeddingsProvenanceIndexMigration string
 //go:embed migrations/000010_require_nonzero_source_record_embeddings.up.sql
 var sourceRecordEmbeddingsNonzeroMigration string
 
+//go:embed migrations/000011_require_finite_source_record_embedding_cosine_norm.up.sql
+var sourceRecordEmbeddingsCosineNormMigration string
+
 var migrations = []struct {
 	version int64
 	query   string
@@ -53,6 +56,7 @@ var migrations = []struct {
 	{version: 8, query: sourceRecordEmbeddingsMigration},
 	{version: 9, query: sourceRecordEmbeddingsProvenanceIndexMigration},
 	{version: 10, query: sourceRecordEmbeddingsNonzeroMigration},
+	{version: 11, query: sourceRecordEmbeddingsCosineNormMigration},
 }
 
 // Migrate applies pending database migrations transactionally.

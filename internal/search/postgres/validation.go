@@ -60,8 +60,8 @@ func normalizeAndValidateEmbeddings(
 				return nil, "", fmt.Errorf("embedding %d vector value %d must be finite", index, valueIndex)
 			}
 		}
-		if !hasNonZeroVectorNorm(embedding.Vector) {
-			return nil, "", fmt.Errorf("embedding %d vector must have non-zero norm", index)
+		if !hasFiniteCosineNorm(embedding.Vector) {
+			return nil, "", fmt.Errorf("embedding %d vector must have finite non-zero cosine norm", index)
 		}
 
 		reference := embeddingReference{
@@ -108,8 +108,8 @@ func normalizeAndValidateSimilarityQuery(
 			return "", "", fmt.Errorf("query vector value %d must be finite", index)
 		}
 	}
-	if !hasNonZeroVectorNorm(queryVector) {
-		return "", "", errors.New("query vector must have non-zero norm")
+	if !hasFiniteCosineNorm(queryVector) {
+		return "", "", errors.New("query vector must have finite non-zero cosine norm")
 	}
 	if limit < 1 || limit > search.MaxSimilarSourceRecordsLimit {
 		return "", "", fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
@@ -117,12 +117,12 @@ func normalizeAndValidateSimilarityQuery(
 	return provider, model, nil
 }
 
-func hasNonZeroVectorNorm(vector []float32) bool {
-	var squaredNorm float64
+func hasFiniteCosineNorm(vector []float32) bool {
+	var squaredNorm float32
 	for _, value := range vector {
-		squaredNorm += float64(value) * float64(value)
+		squaredNorm += value * value
 	}
-	return squaredNorm > 0
+	return squaredNorm > 0 && !math.IsInf(float64(squaredNorm), 0)
 }
 
 func normalizeUUID(value string) (string, bool) {

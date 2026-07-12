@@ -95,7 +95,7 @@ WITH matching_embeddings AS MATERIALIZED (
     WHERE provider = $1
       AND model = $2
       AND public.vector_dims(embedding) = public.vector_dims($3::public.vector)
-      AND public.vector_norm(embedding) > 0
+      AND (embedding OPERATOR(public.<=>) embedding) = 0
 )
 SELECT
     source_records.id::text,
@@ -111,7 +111,7 @@ SELECT
     source_records.updated_by,
     matching_embeddings.provider,
     matching_embeddings.model,
-    matching_embeddings.embedding <=> $3::public.vector AS cosine_distance
+    matching_embeddings.embedding OPERATOR(public.<=>) $3::public.vector AS cosine_distance
 FROM matching_embeddings
 JOIN source_records ON source_records.id = matching_embeddings.source_record_id
 ORDER BY cosine_distance, source_records.id

@@ -101,8 +101,8 @@ func validateEmbeddingBatch(inputs []EmbeddingInput, batch EmbeddingBatch) ([]So
 				return nil, fmt.Errorf("embedding %d vector value %d must be finite", index, valueIndex)
 			}
 		}
-		if !hasNonZeroVectorNorm(providerEmbedding.Vector) {
-			return nil, fmt.Errorf("embedding %d vector must have non-zero norm", index)
+		if !hasFiniteCosineNorm(providerEmbedding.Vector) {
+			return nil, fmt.Errorf("embedding %d vector must have finite non-zero cosine norm", index)
 		}
 
 		embeddings = append(embeddings, SourceRecordEmbedding{
@@ -115,10 +115,10 @@ func validateEmbeddingBatch(inputs []EmbeddingInput, batch EmbeddingBatch) ([]So
 	return embeddings, nil
 }
 
-func hasNonZeroVectorNorm(vector []float32) bool {
-	var squaredNorm float64
+func hasFiniteCosineNorm(vector []float32) bool {
+	var squaredNorm float32
 	for _, value := range vector {
-		squaredNorm += float64(value) * float64(value)
+		squaredNorm += value * value
 	}
-	return squaredNorm > 0
+	return squaredNorm > 0 && !math.IsInf(float64(squaredNorm), 0)
 }
