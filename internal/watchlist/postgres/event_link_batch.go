@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Yanis897349/atlas/internal/watchlist"
@@ -22,9 +23,8 @@ func (repository *Repository) CreateEventLinks(
 		return nil, err
 	}
 
-	links := make([]watchlist.StoredEventLink, 0, len(classifications))
 	if len(classifications) == 0 {
-		return links, nil
+		return []watchlist.StoredEventLink{}, nil
 	}
 
 	transaction, err := repository.db.Begin(ctx)
@@ -33,7 +33,17 @@ func (repository *Repository) CreateEventLinks(
 	}
 	defer func() { _ = transaction.Rollback(context.Background()) }()
 
-	for index, classification := range classifications {
+	// Keep overlapping batches from acquiring unique-index locks in conflicting orders.
+	writeOrder := append([]watchlist.EventRelevance(nil), classifications...)
+	sort.Slice(writeOrder, func(left int, right int) bool {
+		if writeOrder[left].Symbol != writeOrder[right].Symbol {
+			return writeOrder[left].Symbol < writeOrder[right].Symbol
+		}
+		return writeOrder[left].Event.ID < writeOrder[right].Event.ID
+	})
+
+	linksByReference := make(map[eventLinkReference]watchlist.StoredEventLink, len(writeOrder))
+	for _, classification := range writeOrder {
 		link, createErr := createOrLoadEventLink(
 			ctx,
 			transaction,
@@ -43,15 +53,34 @@ func (repository *Repository) CreateEventLinks(
 			actor,
 		)
 		if createErr != nil {
-			return nil, fmt.Errorf("create watchlist event link %d: %w", index, createErr)
+			return nil, fmt.Errorf(
+				"create watchlist event link for %q and event %q: %w",
+				classification.Symbol,
+				classification.Event.ID,
+				createErr,
+			)
 		}
-		links = append(links, link)
+		linksByReference[newEventLinkReference(classification)] = link
 	}
 
 	if err := transaction.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit watchlist event link creation: %w", err)
 	}
+
+	links := make([]watchlist.StoredEventLink, 0, len(classifications))
+	for _, classification := range classifications {
+		links = append(links, linksByReference[newEventLinkReference(classification)])
+	}
 	return links, nil
+}
+
+type eventLinkReference struct {
+	symbol  string
+	eventID string
+}
+
+func newEventLinkReference(classification watchlist.EventRelevance) eventLinkReference {
+	return eventLinkReference{symbol: classification.Symbol, eventID: classification.Event.ID}
 }
 
 func normalizeAndValidateEventLinks(
@@ -68,7 +97,7 @@ func normalizeAndValidateEventLinks(
 	}
 
 	normalized := make([]watchlist.EventRelevance, 0, len(classifications))
-	seen := make(map[string]struct{}, len(classifications))
+	seen := make(map[eventLinkReference]struct{}, len(classifications))
 	for index, classification := range classifications {
 		if !classification.Relevant {
 			return nil, "", fmt.Errorf("classification %d must be relevant", index)
@@ -81,7 +110,7 @@ func normalizeAndValidateEventLinks(
 			return nil, "", fmt.Errorf("classification %d: %w", index, err)
 		}
 
-		key := classification.Symbol + "\x00" + classification.Event.ID
+		key := newEventLinkReference(classification)
 		if _, exists := seen[key]; exists {
 			continue
 		}

@@ -220,17 +220,41 @@ func TestRepositoryCreateEventLinksHandlesConcurrentConflicts(t *testing.T) {
 	storedWatchlist, _ := repository.CreateWatchlist(t.Context(), watchlist.Definition{
 		Name: "Concurrent classifications", Symbols: []string{"SPY"},
 	}, "creator")
-	eventID := "00000000-0000-0000-0000-000000000931"
-	insertEconomicEvent(t, database.Pool, eventID, "concurrent-classification", time.Now())
-	batch := []watchlist.EventRelevance{relevantClassification("SPY", eventID)}
+	eventIDs := []string{
+		"00000000-0000-0000-0000-000000000931",
+		"00000000-0000-0000-0000-000000000932",
+	}
+	for index, eventID := range eventIDs {
+		insertEconomicEvent(t, database.Pool, eventID, fmtExternalID(index), time.Now())
+	}
+	if _, err := database.Pool.Exec(t.Context(), `
+CREATE FUNCTION delay_batch_event_link() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_sleep(0.1);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER delay_batch_event_link
+AFTER INSERT ON watchlist_event_links
+FOR EACH ROW EXECUTE FUNCTION delay_batch_event_link()
+`); err != nil {
+		t.Fatalf("create event-link concurrency delay: %v", err)
+	}
 
-	const workers = 8
-	results := make(chan []watchlist.StoredEventLink, workers)
-	errors := make(chan error, workers)
+	batches := [][]watchlist.EventRelevance{
+		{relevantClassification("SPY", eventIDs[0]), relevantClassification("SPY", eventIDs[1])},
+		{relevantClassification("SPY", eventIDs[1]), relevantClassification("SPY", eventIDs[0])},
+	}
+	results := make(chan []watchlist.StoredEventLink, len(batches))
+	errors := make(chan error, len(batches))
+	start := make(chan struct{})
 	var waitGroup sync.WaitGroup
-	for range workers {
+	for _, batch := range batches {
 		waitGroup.Go(func() {
-			links, err := repository.CreateEventLinks(t.Context(), storedWatchlist.ID, batch, "classifier")
+			<-start
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			links, err := repository.CreateEventLinks(ctx, storedWatchlist.ID, batch, "classifier")
 			if err != nil {
 				errors <- err
 				return
@@ -238,6 +262,7 @@ func TestRepositoryCreateEventLinksHandlesConcurrentConflicts(t *testing.T) {
 			results <- links
 		})
 	}
+	close(start)
 	waitGroup.Wait()
 	close(results)
 	close(errors)
@@ -245,20 +270,21 @@ func TestRepositoryCreateEventLinksHandlesConcurrentConflicts(t *testing.T) {
 	for err := range errors {
 		t.Errorf("concurrent CreateEventLinks() error = %v", err)
 	}
-	var linkID string
+	gotOrders := make(map[string]bool, len(batches))
 	for links := range results {
-		if len(links) != 1 {
-			t.Errorf("concurrent links = %#v, want one", links)
+		if len(links) != len(eventIDs) {
+			t.Errorf("concurrent links = %#v, want two", links)
 			continue
 		}
-		if linkID == "" {
-			linkID = links[0].ID
-		}
-		if links[0].ID != linkID {
-			t.Errorf("concurrent link ID = %q, want %q", links[0].ID, linkID)
+		gotOrders[links[0].Event.ID+","+links[1].Event.ID] = true
+	}
+	for _, batch := range batches {
+		order := batch[0].Event.ID + "," + batch[1].Event.ID
+		if !gotOrders[order] {
+			t.Errorf("concurrent results did not preserve input order %q", order)
 		}
 	}
-	assertEventLinkCount(t, database.Pool, storedWatchlist.ID, 1)
+	assertEventLinkCount(t, database.Pool, storedWatchlist.ID, 2)
 }
 
 func relevantClassification(symbol string, eventID string) watchlist.EventRelevance {
