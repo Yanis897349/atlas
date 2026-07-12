@@ -15,6 +15,7 @@ type watchlistCommand struct {
 	lookup      watchlistQuery
 	list        watchlistsQuery
 	linkEvent   linkWatchlistEventCommand
+	linkEvents  linkWatchlistEventsCommand
 	unlinkEvent unlinkWatchlistEventCommand
 	listEvents  watchlistEventsQuery
 }
@@ -37,6 +38,8 @@ func parseWatchlistCommand(arguments []string) (watchlistCommand, bool, error) {
 		command.list, err = parseWatchlistsQuery(arguments[1:])
 	case "link-watchlist-event":
 		command.linkEvent, err = parseLinkWatchlistEventCommand(arguments[1:])
+	case "link-watchlist-events":
+		command.linkEvents, err = parseLinkWatchlistEventsCommand(arguments[1:])
 	case "unlink-watchlist-event":
 		command.unlinkEvent, err = parseUnlinkWatchlistEventCommand(arguments[1:])
 	case "watchlist-events":
@@ -69,6 +72,8 @@ func runWatchlistCommand(
 		return runWatchlists(ctx, repository, stdout, command.list)
 	case "link-watchlist-event":
 		return runLinkWatchlistEvent(ctx, repository, stdout, command.linkEvent)
+	case "link-watchlist-events":
+		panic("cross-repository watchlist command must be handled before dispatch")
 	case "unlink-watchlist-event":
 		return runUnlinkWatchlistEvent(ctx, repository, command.unlinkEvent)
 	case "watchlist-events":

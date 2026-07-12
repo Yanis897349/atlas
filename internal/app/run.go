@@ -101,6 +101,20 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		if err != nil {
 			return fmt.Errorf("configure watchlist repository: %w", err)
 		}
+		if parsedCommand.name == "link-watchlist-events" {
+			eventRepository, err := calendarpostgres.NewRepository(pool)
+			if err != nil {
+				return fmt.Errorf("configure economic event repository: %w", err)
+			}
+			return runLinkWatchlistEvents(
+				ctx,
+				eventRepository,
+				repository,
+				repository,
+				stdout,
+				parsedCommand.watchlistCommand.linkEvents,
+			)
+		}
 		return runWatchlistCommand(ctx, repository, stdout, *parsedCommand.watchlistCommand)
 	}
 	switch parsedCommand.name {

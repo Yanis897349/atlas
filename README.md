@@ -231,6 +231,12 @@ mise exec -- go run ./cmd/atlas link-watchlist-event \
   --symbol EURUSD \
   --event-id 00000000-0000-0000-0000-000000000002 \
   --actor analyst
+mise exec -- go run ./cmd/atlas link-watchlist-events \
+  --id 00000000-0000-0000-0000-000000000001 \
+  --from 2026-07-01T00:00:00Z \
+  --to 2026-08-01T00:00:00Z \
+  --limit 25 \
+  --actor classifier
 mise exec -- go run ./cmd/atlas unlink-watchlist-event \
   --id 00000000-0000-0000-0000-000000000001 \
   --symbol EURUSD \
@@ -263,8 +269,10 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 
 `link-watchlist-event` atomically associates one watchlist instrument with one canonical economic event. It requires the watchlist and event UUIDs, an instrument symbol belonging to that watchlist, and an explicit audit actor; actors are trimmed and symbols are trimmed and canonicalized to uppercase. Missing references return a not-found error, duplicate associations return a uniqueness error, and failures emit no JSON. A successful command emits the complete immutable link, link audit metadata, and nested source-cited economic event with its persistence metadata.
 
+`link-watchlist-events` retrieves one globally bounded inclusive RFC 3339 window of supported United States and Eurozone economic-event candidates, applies the deterministic relevance rules to every symbol in one persisted watchlist, and atomically creates or loads the relevant links. It requires a watchlist UUID and explicit audit actor, emits complete source-cited links in stable symbol-then-event order, represents no links as `[]`, and is idempotent across repeated invocations.
+
 `unlink-watchlist-event` atomically removes one exact association identified by its watchlist UUID, canonicalized instrument symbol, and economic-event UUID. Successful deletion emits no output, missing references or associations return a not-found error without output, and the watchlist, instrument, economic event, and unrelated links are preserved.
 
 `watchlist-events` reads up to 100 linked economic events for one watchlist instrument. It canonicalizes the supplied symbol and emits complete links as a JSON array ordered by event time and event UUID, with an empty result represented as `[]`. Bulk unlinking, automated relevance inference, market data, scheduling, HTTP delivery, and UI presentation remain deferred.
 
-The provider-neutral watchlist domain classifies all supported United States economic-event types as relevant to `SPY`, `DXY`, and `EURUSD`, and all supported Eurozone event types as relevant only to `EURUSD`. Its application service retrieves one bounded inclusive window of canonical event candidates, loads one persisted watchlist, applies those rules across its ordered symbols and candidate order, and atomically persists relevant results in stable symbol-then-event order. Repeated and duplicate associations are successful no-ops, returned links contain the canonical source-cited events resolved from PostgreSQL, and unsupported instruments, regions, and event types fail explicitly. Command exposure, AI inference, market data, scheduling, HTTP delivery, and UI presentation remain deferred.
+The provider-neutral watchlist domain classifies all supported United States economic-event types as relevant to `SPY`, `DXY`, and `EURUSD`, and all supported Eurozone event types as relevant only to `EURUSD`. Its application service retrieves one bounded inclusive window of canonical event candidates, loads one persisted watchlist, applies those rules across its ordered symbols and candidate order, and atomically persists relevant results in stable symbol-then-event order. Repeated and duplicate associations are successful no-ops, returned links contain the canonical source-cited events resolved from PostgreSQL, and unsupported instruments, regions, and event types fail explicitly. AI inference, market data, scheduling, HTTP delivery, and UI presentation remain deferred.
