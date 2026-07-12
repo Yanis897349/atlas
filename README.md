@@ -211,6 +211,12 @@ mise exec -- go run ./cmd/atlas daily-briefs \
   --from 2026-07-01T00:00:00Z \
   --to 2026-08-01T00:00:00Z \
   --limit 25
+export ATLAS_OPENAI_EMBEDDING_MODEL='replace-with-an-embeddings-api-model'
+mise exec -- go run ./cmd/atlas index-source-records \
+  --from 2026-07-10T12:00:00Z \
+  --to 2026-07-11T12:00:00Z \
+  --limit 50 \
+  --actor search-indexer
 mise exec -- go run ./cmd/atlas create-watchlist \
   --name 'Macro focus' \
   --actor analyst \
@@ -256,6 +262,8 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 `daily-brief` accepts the same windows and limits, requires `ATLAS_OPENAI_API_KEY` and `ATLAS_OPENAI_MODEL`, and sends the assembled deterministic input to the OpenAI Responses API. After validating the generated sections and resolving canonical source-record or upcoming-event citations from PostgreSQL, it atomically persists an immutable brief with its UUID, input windows, provider and model provenance, ordered content, citations, and audit metadata. The command emits that complete stored record as JSON; provider-supplied URLs are never trusted, and failed generation or validation does not create a brief. Each invocation performs one bounded provider request without retries. Regeneration policy, scheduling, HTTP delivery, and UI presentation are not part of this command.
 
 `daily-briefs` reads persisted briefs for one supported region over an inclusive RFC 3339 creation window, with a limit from 1 through 100. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each brief's original input windows, provider and model provenance, ordered sections and canonical citations, and audit metadata. The command does not call an AI provider or modify stored briefs.
+
+`index-source-records` reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs one bounded provider request without retries, and repeated indexing is idempotent for unchanged vectors. Automatic ingestion hooks, scheduling, pagination, semantic query commands, and body or content embeddings remain deferred.
 
 `create-watchlist` atomically persists one user-authored watchlist. It requires a name, an audit actor, and one or more ordered `--symbol` flags; names and actors are trimmed, while symbols are trimmed, canonicalized to uppercase, and rejected when empty or duplicated after normalization. The command emits the complete stored definition with its UUID and audit metadata as JSON.
 

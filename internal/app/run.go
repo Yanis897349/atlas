@@ -35,21 +35,23 @@ type OpenAIHTTPClient = openaiapi.HTTPClient
 
 // Dependencies contains process-bound dependencies and deterministic test seams.
 type Dependencies struct {
-	Getenv              func(string) string
-	RSSHTTPClient       rss.HTTPClient
-	RSSFeedURL          string
-	RSSWait             func(context.Context, time.Duration) error
-	BEA                 CalendarSourceDependencies
-	BLS                 CalendarSourceDependencies
-	Census              CalendarSourceDependencies
-	ECB                 CalendarSourceDependencies
-	Eurostat            CalendarSourceDependencies
-	Fed                 CalendarSourceDependencies
-	SPGlobal            CalendarSourceDependencies
-	OpenAIHTTPClient    OpenAIHTTPClient
-	OpenAIEndpoint      string
-	OpenAIRequestBudget time.Duration
-	Stdout              io.Writer
+	Getenv                        func(string) string
+	RSSHTTPClient                 rss.HTTPClient
+	RSSFeedURL                    string
+	RSSWait                       func(context.Context, time.Duration) error
+	BEA                           CalendarSourceDependencies
+	BLS                           CalendarSourceDependencies
+	Census                        CalendarSourceDependencies
+	ECB                           CalendarSourceDependencies
+	Eurostat                      CalendarSourceDependencies
+	Fed                           CalendarSourceDependencies
+	SPGlobal                      CalendarSourceDependencies
+	OpenAIHTTPClient              OpenAIHTTPClient
+	OpenAIEndpoint                string
+	OpenAIRequestBudget           time.Duration
+	OpenAIEmbeddingsEndpoint      string
+	OpenAIEmbeddingsRequestBudget time.Duration
+	Stdout                        io.Writer
 }
 
 // Run executes one Atlas command.
@@ -74,6 +76,14 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		if err != nil {
 			return err
 		}
+	}
+	sourceRecordEmbedder, err := configuredSourceRecordEmbedder(
+		parsedCommand.searchCommand != nil,
+		getenv,
+		dependencies,
+	)
+	if err != nil {
+		return err
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
@@ -112,6 +122,9 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			candidates = eventRepository
 		}
 		return watchlistcmd.Run(ctx, repository, candidates, stdout, *parsedCommand.watchlistCommand)
+	}
+	if parsedCommand.searchCommand != nil {
+		return runSearchCommand(ctx, pool, sourceRecordEmbedder, stdout, *parsedCommand.searchCommand)
 	}
 	switch parsedCommand.name {
 	case "migrate":

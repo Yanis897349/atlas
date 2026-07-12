@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Yanis897349/atlas/internal/app/searchcmd"
 	"github.com/Yanis897349/atlas/internal/app/watchlistcmd"
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|link-watchlist-events|unlink-watchlist-event|watchlist-events>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|link-watchlist-events|unlink-watchlist-event|watchlist-events|index-source-records>"
 
 type command struct {
 	name                     string
@@ -22,6 +23,7 @@ type command struct {
 	dailyBriefInputQuery     dailybrief.InputQuery
 	storedDailyBriefsQuery   storedDailyBriefsQuery
 	watchlistCommand         *watchlistcmd.Command
+	searchCommand            *searchcmd.Command
 }
 
 func parseCommand(arguments []string) (command, error) {
@@ -59,6 +61,13 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], storedDailyBriefsQuery: query}, nil
+	}
+	searchCommand, recognized, err := searchcmd.Parse(arguments)
+	if err != nil {
+		return command{}, err
+	}
+	if recognized {
+		return command{name: arguments[0], searchCommand: &searchCommand}, nil
 	}
 
 	watchlistCommand, recognized, err := watchlistcmd.Parse(arguments)
