@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/Yanis897349/atlas/internal/ingestion"
+	"github.com/Yanis897349/atlas/internal/search/vector"
 )
 
 // EmbedSourceRecords embeds persisted source-record titles in input order.
@@ -83,8 +83,8 @@ func validateEmbeddingBatch(inputs []EmbeddingInput, batch EmbeddingBatch) ([]So
 				inputs[index].SourceRecordID,
 			)
 		}
-		if len(providerEmbedding.Vector) == 0 {
-			return nil, fmt.Errorf("embedding %d vector is required", index)
+		if err := vector.Validate(providerEmbedding.Vector); err != nil {
+			return nil, fmt.Errorf("embedding %d %w", index, err)
 		}
 		if index == 0 {
 			dimension = len(providerEmbedding.Vector)
@@ -96,15 +96,6 @@ func validateEmbeddingBatch(inputs []EmbeddingInput, batch EmbeddingBatch) ([]So
 				dimension,
 			)
 		}
-		for valueIndex, value := range providerEmbedding.Vector {
-			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-				return nil, fmt.Errorf("embedding %d vector value %d must be finite", index, valueIndex)
-			}
-		}
-		if !hasFiniteCosineNorm(providerEmbedding.Vector) {
-			return nil, fmt.Errorf("embedding %d vector must have finite non-zero cosine norm", index)
-		}
-
 		embeddings = append(embeddings, SourceRecordEmbedding{
 			SourceRecordID: providerEmbedding.SourceRecordID,
 			Provider:       provider,
@@ -113,12 +104,4 @@ func validateEmbeddingBatch(inputs []EmbeddingInput, batch EmbeddingBatch) ([]So
 		})
 	}
 	return embeddings, nil
-}
-
-func hasFiniteCosineNorm(vector []float32) bool {
-	var squaredNorm float32
-	for _, value := range vector {
-		squaredNorm += value * value
-	}
-	return squaredNorm > 0 && !math.IsInf(float64(squaredNorm), 0)
 }

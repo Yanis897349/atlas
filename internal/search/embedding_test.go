@@ -131,11 +131,7 @@ func TestEmbedSourceRecordsRejectsInvalidProviderBatches(t *testing.T) {
 		{name: "duplicate result", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[1].SourceRecordID = "record-1" }), contains: "embedding 1 source record ID \"record-1\" does not match input ID \"record-2\""},
 		{name: "empty vector", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[0].Vector = nil }), contains: "embedding 0 vector is required"},
 		{name: "zero norm", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[0].Vector = []float32{0, 0} }), contains: "embedding 0 vector must have finite non-zero cosine norm"},
-		{name: "underflowing norm", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[0].Vector = []float32{1e-30} }), contains: "embedding 0 vector must have finite non-zero cosine norm"},
-		{name: "overflowing norm", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[0].Vector = []float32{1e30} }), contains: "embedding 0 vector must have finite non-zero cosine norm"},
 		{name: "NaN", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[0].Vector[1] = float32(math.NaN()) }), contains: "embedding 0 vector value 1 must be finite"},
-		{name: "positive infinity", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[1].Vector[0] = float32(math.Inf(1)) }), contains: "embedding 1 vector value 0 must be finite"},
-		{name: "negative infinity", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[1].Vector[0] = float32(math.Inf(-1)) }), contains: "embedding 1 vector value 0 must be finite"},
 		{name: "dimension mismatch", batch: withBatch(valid, func(batch *EmbeddingBatch) { batch.Embeddings[1].Vector = []float32{0.3} }), contains: "embedding 1 vector dimension 1 does not match batch dimension 2"},
 	}
 
@@ -151,25 +147,6 @@ func TestEmbedSourceRecordsRejectsInvalidProviderBatches(t *testing.T) {
 			}
 		})
 	}
-}
-
-type embedderStub struct {
-	batch  EmbeddingBatch
-	err    error
-	calls  int
-	inputs []EmbeddingInput
-}
-
-func (embedder *embedderStub) Embed(_ context.Context, inputs []EmbeddingInput) (EmbeddingBatch, error) {
-	embedder.calls++
-	embedder.inputs = inputs
-	return embedder.batch, embedder.err
-}
-
-type panicEmbedder struct{}
-
-func (panicEmbedder) Embed(context.Context, []EmbeddingInput) (EmbeddingBatch, error) {
-	panic("embedding provider must not run")
 }
 
 func withRecord(

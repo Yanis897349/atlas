@@ -13,7 +13,7 @@ import (
 
 func TestSearchSourceRecordsEmbedsExactQueryAndPreservesRepositoryResults(t *testing.T) {
 	query := "  central bank policy outlook  "
-	embedder := &semanticEmbedderStub{batch: EmbeddingBatch{
+	embedder := &embedderStub{batch: EmbeddingBatch{
 		Provider: " openai ",
 		Model:    " embedding-model ",
 		Embeddings: []ProviderEmbedding{{
@@ -73,7 +73,7 @@ func TestSearchSourceRecordsRejectsInvalidInputBeforeDependencies(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			got, err := SearchSourceRecords(
 				t.Context(),
-				panicSemanticEmbedder{},
+				panicEmbedder{},
 				panicSimilarSourceRecordReader{},
 				test.query,
 				test.limit,
@@ -137,7 +137,7 @@ func TestSearchSourceRecordsRejectsMalformedQueryEmbedding(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := SearchSourceRecords(
 				t.Context(),
-				&semanticEmbedderStub{batch: test.batch},
+				&embedderStub{batch: test.batch},
 				panicSimilarSourceRecordReader{},
 				"query",
 				1,
@@ -168,7 +168,7 @@ func TestSearchSourceRecordsPreservesDependencyFailures(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			embedder := &semanticEmbedderStub{batch: validSemanticQueryBatch(), err: test.providerErr}
+			embedder := &embedderStub{batch: validSemanticQueryBatch(), err: test.providerErr}
 			var reader SimilarSourceRecordReader = &similarSourceRecordReaderStub{err: test.readerErr}
 			if test.providerErr != nil {
 				reader = panicSimilarSourceRecordReader{}
@@ -193,7 +193,7 @@ func TestSearchSourceRecordsPreservesNonNilEmptyResults(t *testing.T) {
 	want := []SimilarSourceRecord{}
 	got, err := SearchSourceRecords(
 		t.Context(),
-		&semanticEmbedderStub{batch: validSemanticQueryBatch()},
+		&embedderStub{batch: validSemanticQueryBatch()},
 		&similarSourceRecordReaderStub{results: want},
 		"query",
 		1,
@@ -241,22 +241,6 @@ func semanticSearchResultFixture(id, title string, distance float64) SimilarSour
 	}
 }
 
-type semanticEmbedderStub struct {
-	batch  EmbeddingBatch
-	err    error
-	calls  int
-	inputs []EmbeddingInput
-}
-
-func (embedder *semanticEmbedderStub) Embed(
-	_ context.Context,
-	inputs []EmbeddingInput,
-) (EmbeddingBatch, error) {
-	embedder.calls++
-	embedder.inputs = inputs
-	return embedder.batch, embedder.err
-}
-
 type similarSourceRecordReaderStub struct {
 	results     []SimilarSourceRecord
 	err         error
@@ -280,12 +264,6 @@ func (reader *similarSourceRecordReaderStub) SimilarSourceRecords(
 	reader.queryVector = queryVector
 	reader.limit = limit
 	return reader.results, reader.err
-}
-
-type panicSemanticEmbedder struct{}
-
-func (panicSemanticEmbedder) Embed(context.Context, []EmbeddingInput) (EmbeddingBatch, error) {
-	panic("embedding provider must not run")
 }
 
 type panicSimilarSourceRecordReader struct{}

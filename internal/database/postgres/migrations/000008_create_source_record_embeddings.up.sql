@@ -13,6 +13,11 @@ CREATE TABLE source_record_embeddings (
     CONSTRAINT uq_source_record_embeddings_record_provider_model UNIQUE (source_record_id, provider, model),
     CONSTRAINT chk_source_record_embeddings_provider_nonempty CHECK (btrim(provider) <> ''),
     CONSTRAINT chk_source_record_embeddings_model_nonempty CHECK (btrim(model) <> ''),
+    CONSTRAINT chk_source_record_embeddings_embedding_cosine_norm
+        CHECK ((embedding OPERATOR(public.<=>) embedding) = 0),
     CONSTRAINT chk_source_record_embeddings_created_by_nonempty CHECK (btrim(created_by) <> ''),
     CONSTRAINT chk_source_record_embeddings_updated_by_nonempty CHECK (btrim(updated_by) <> '')
 );
+
+CREATE INDEX ix_source_record_embeddings_provider_model
+    ON source_record_embeddings (provider, model);

@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/Yanis897349/atlas/internal/ingestion"
+	recordpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres/record"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -30,32 +31,7 @@ func NewRepository(db DB) (*Repository, error) {
 }
 
 func scanSourceRecord(row pgx.Row) (ingestion.StoredSourceRecord, error) {
-	var record ingestion.StoredSourceRecord
-	err := row.Scan(
-		&record.ID,
-		&record.Source,
-		&record.SourceItemID,
-		&record.OriginalURL,
-		&record.Title,
-		&record.PublishedAt,
-		&record.RetrievedAt,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-		&record.CreatedBy,
-		&record.UpdatedBy,
-	)
-	return record, err
+	return recordpostgres.Scan(row)
 }
 
-const sourceRecordColumns = `
-    id::text,
-    source,
-    source_item_id,
-    original_url,
-    title,
-    published_at,
-    retrieved_at,
-    created_at,
-    updated_at,
-    created_by,
-    updated_by`
+var sourceRecordColumns = recordpostgres.Columns("")

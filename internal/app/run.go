@@ -12,11 +12,11 @@ import (
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/Yanis897349/atlas/internal/calendar/sourcehttp"
 	"github.com/Yanis897349/atlas/internal/dailybrief"
-	dailybriefopenai "github.com/Yanis897349/atlas/internal/dailybrief/openai"
 	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
+	openaiapi "github.com/Yanis897349/atlas/internal/openai"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 	watchlistpostgres "github.com/Yanis897349/atlas/internal/watchlist/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,8 +30,8 @@ type CalendarSourceDependencies struct {
 	RequestBudget time.Duration
 }
 
-// OpenAIHTTPClient executes OpenAI Responses API requests.
-type OpenAIHTTPClient = dailybriefopenai.HTTPClient
+// OpenAIHTTPClient executes OpenAI API requests.
+type OpenAIHTTPClient = openaiapi.HTTPClient
 
 // Dependencies contains process-bound dependencies and deterministic test seams.
 type Dependencies struct {

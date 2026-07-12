@@ -19,7 +19,7 @@ func TestIndexSourceRecordEmbeddingsPreservesRetrievalOrderAndProvenance(t *test
 		{ID: "record-first", SourceRecord: ingestion.SourceRecord{Title: "Earlier title"}},
 	}
 	reader := &indexSourceRecordReaderStub{records: records}
-	embedder := &indexEmbedderStub{batch: EmbeddingBatch{
+	embedder := &embedderStub{batch: EmbeddingBatch{
 		Provider: " openai ",
 		Model:    " embedding-model ",
 		Embeddings: []ProviderEmbedding{
@@ -91,7 +91,7 @@ func TestIndexSourceRecordEmbeddingsPersistsEmptyResultWithoutProviderCall(t *te
 	got, err := IndexSourceRecordEmbeddings(
 		t.Context(),
 		&indexSourceRecordReaderStub{records: []ingestion.StoredSourceRecord{}},
-		panicIndexEmbedder{},
+		panicEmbedder{},
 		writer,
 		time.Now(),
 		time.Now(),
@@ -141,7 +141,7 @@ func TestIndexSourceRecordEmbeddingsPreservesDependencyFailures(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			reader := &indexSourceRecordReaderStub{records: records, err: test.readerErr}
-			embedder := &indexEmbedderStub{batch: validBatch, err: test.embedErr}
+			embedder := &embedderStub{batch: validBatch, err: test.embedErr}
 			writer := &sourceRecordEmbeddingWriterStub{err: test.writerErr}
 
 			got, err := IndexSourceRecordEmbeddings(
@@ -199,19 +199,6 @@ func (reader *indexSourceRecordReaderStub) RecentSourceRecords(
 	return reader.records, reader.err
 }
 
-type indexEmbedderStub struct {
-	batch  EmbeddingBatch
-	err    error
-	calls  int
-	inputs []EmbeddingInput
-}
-
-func (embedder *indexEmbedderStub) Embed(_ context.Context, inputs []EmbeddingInput) (EmbeddingBatch, error) {
-	embedder.calls++
-	embedder.inputs = append([]EmbeddingInput(nil), inputs...)
-	return embedder.batch, embedder.err
-}
-
 type sourceRecordEmbeddingWriterStub struct {
 	err        error
 	calls      int
@@ -237,10 +224,4 @@ func cloneSourceRecordEmbeddings(embeddings []SourceRecordEmbedding) []SourceRec
 		cloned[index] = embedding
 	}
 	return cloned
-}
-
-type panicIndexEmbedder struct{}
-
-func (panicIndexEmbedder) Embed(context.Context, []EmbeddingInput) (EmbeddingBatch, error) {
-	panic("embedding provider must not run")
 }

@@ -55,7 +55,7 @@ func validateRecentSourceRecordsQuery(windowStart, windowEnd time.Time, limit in
 	return nil
 }
 
-const recentSourceRecordsSQL = `
+var recentSourceRecordsSQL = `
 SELECT ` + sourceRecordColumns + `
 FROM source_records
 WHERE published_at >= $1

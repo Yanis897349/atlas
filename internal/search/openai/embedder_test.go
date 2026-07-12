@@ -75,57 +75,17 @@ func TestEmbedderRequestsOrderedFloatEmbeddingsAndRestoresIdentity(t *testing.T)
 	}
 }
 
-func TestNewEmbedderValidatesConfiguration(t *testing.T) {
-	tests := []struct {
-		name   string
-		config Config
-		want   string
-	}{
-		{name: "missing API key", config: Config{Model: "model"}, want: "API key is required"},
-		{name: "missing model", config: Config{APIKey: "key"}, want: "model is required"},
-		{name: "oversized model", config: Config{
-			APIKey: "key", Model: strings.Repeat("m", maxModelBytes+1),
-		}, want: "model must not exceed"},
-		{name: "negative request budget", config: Config{
-			APIKey: "key", Model: "model", RequestBudget: -time.Second,
-		}, want: "request budget must not be negative"},
-		{name: "relative endpoint", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "/v1/embeddings",
-		}, want: "absolute HTTP(S) URL"},
-		{name: "unsupported endpoint scheme", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "file:///tmp/embeddings",
-		}, want: "absolute HTTP(S) URL"},
-		{name: "remote plaintext endpoint", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "http://api.example.com/v1/embeddings",
-		}, want: "must use HTTPS unless it targets a loopback host"},
-		{name: "endpoint credentials", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "https://user@example.com/v1/embeddings",
-		}, want: "without credentials or a fragment"},
-		{name: "endpoint fragment", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "https://api.example.com/v1/embeddings#fragment",
-		}, want: "without credentials or a fragment"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			embedder, err := NewEmbedder(test.config)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("NewEmbedder() = (%#v, %v), want error containing %q", embedder, err, test.want)
-			}
-		})
+func TestNewEmbedderUsesEmbeddingEndpointDefault(t *testing.T) {
+	if embedder, err := NewEmbedder(Config{Model: "model"}); err == nil || !strings.Contains(err.Error(), "API key is required") {
+		t.Fatalf("NewEmbedder() = (%#v, %v), want shared configuration validation", embedder, err)
 	}
 
-	embedder, err := NewEmbedder(Config{APIKey: " key ", Model: " model "})
+	embedder, err := NewEmbedder(Config{APIKey: "key", Model: "model"})
 	if err != nil {
 		t.Fatalf("NewEmbedder() error = %v", err)
 	}
-	if embedder.apiKey != "key" || embedder.model != "model" ||
-		embedder.endpoint != defaultEndpoint || embedder.requestBudget != defaultRequestBudget || embedder.client == nil {
+	if embedder.endpoint != defaultEndpoint {
 		t.Errorf("embedder defaults = %#v", embedder)
-	}
-	client, ok := embedder.client.(*http.Client)
-	if !ok || client.Timeout != defaultRequestBudget || client.CheckRedirect == nil ||
-		!errors.Is(client.CheckRedirect(&http.Request{}, nil), http.ErrUseLastResponse) {
-		t.Errorf("default HTTP client must use the request budget and reject redirects")
 	}
 }
 

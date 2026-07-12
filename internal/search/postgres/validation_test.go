@@ -41,11 +41,8 @@ func TestRepositoryValidatesEmbeddingBatchBeforePostgreSQL(t *testing.T) {
 		{name: "model", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Model = " " }), actor: "actor", contains: "model is required"},
 		{name: "vector", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector = nil }), actor: "actor", contains: "vector is required"},
 		{name: "zero norm", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector = []float32{0, 0} }), actor: "actor", contains: "vector must have finite non-zero cosine norm"},
-		{name: "underflowing norm", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector = []float32{1e-30} }), actor: "actor", contains: "vector must have finite non-zero cosine norm"},
-		{name: "overflowing norm", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector = []float32{1e30} }), actor: "actor", contains: "vector must have finite non-zero cosine norm"},
 		{name: "dimension", embeddings: updateEmbedding(valid, 1, func(value *search.SourceRecordEmbedding) { value.Vector = []float32{0.3} }), actor: "actor", contains: "does not match batch dimension"},
 		{name: "NaN", embeddings: updateEmbedding(valid, 0, func(value *search.SourceRecordEmbedding) { value.Vector[0] = float32(math.NaN()) }), actor: "actor", contains: "must be finite"},
-		{name: "infinity", embeddings: updateEmbedding(valid, 1, func(value *search.SourceRecordEmbedding) { value.Vector[1] = float32(math.Inf(1)) }), actor: "actor", contains: "must be finite"},
 		{name: "duplicate provenance", embeddings: updateEmbedding(valid, 1, func(value *search.SourceRecordEmbedding) { value.SourceRecordID = valid[0].SourceRecordID }), actor: "actor", contains: "duplicates source record"},
 		{name: "duplicate UUID alias", embeddings: updateEmbedding(valid, 1, func(value *search.SourceRecordEmbedding) {
 			value.SourceRecordID = strings.ToUpper(strings.ReplaceAll(valid[0].SourceRecordID, "-", ""))

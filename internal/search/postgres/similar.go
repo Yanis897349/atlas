@@ -3,9 +3,8 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/Yanis897349/atlas/internal/ingestion"
+	recordpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres/record"
 	"github.com/Yanis897349/atlas/internal/search"
 	"github.com/jackc/pgx/v5"
 	"github.com/pgvector/pgvector-go"
@@ -53,42 +52,16 @@ func (repository *Repository) SimilarSourceRecords(
 
 func scanSimilarSourceRecord(row pgx.Row) (search.SimilarSourceRecord, error) {
 	var result search.SimilarSourceRecord
-	record := &result.SourceRecord
-	err := row.Scan(
-		&record.ID,
-		&record.Source,
-		&record.SourceItemID,
-		&record.OriginalURL,
-		&record.Title,
-		&record.PublishedAt,
-		&record.RetrievedAt,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-		&record.CreatedBy,
-		&record.UpdatedBy,
-		&result.Provider,
-		&result.Model,
-		&result.CosineDistance,
-	)
-	if err != nil {
+	destinations := recordpostgres.Destinations(&result.SourceRecord)
+	destinations = append(destinations, &result.Provider, &result.Model, &result.CosineDistance)
+	if err := row.Scan(destinations...); err != nil {
 		return search.SimilarSourceRecord{}, err
 	}
-	normalizeSourceRecordTimes(&result.SourceRecord)
+	recordpostgres.NormalizeTimes(&result.SourceRecord)
 	return result, nil
 }
 
-func normalizeSourceRecordTimes(record *ingestion.StoredSourceRecord) {
-	for _, value := range []*time.Time{
-		&record.PublishedAt,
-		&record.RetrievedAt,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	} {
-		*value = value.UTC()
-	}
-}
-
-const similarSourceRecordsSQL = `
+var similarSourceRecordsSQL = `
 WITH matching_embeddings AS MATERIALIZED (
     SELECT source_record_id, provider, model, embedding
     FROM source_record_embeddings
@@ -98,17 +71,7 @@ WITH matching_embeddings AS MATERIALIZED (
       AND (embedding OPERATOR(public.<=>) embedding) = 0
 )
 SELECT
-    source_records.id::text,
-    source_records.source,
-    source_records.source_item_id,
-    source_records.original_url,
-    source_records.title,
-    source_records.published_at,
-    source_records.retrieved_at,
-    source_records.created_at,
-    source_records.updated_at,
-    source_records.created_by,
-    source_records.updated_by,
+` + recordpostgres.Columns("source_records") + `,
     matching_embeddings.provider,
     matching_embeddings.model,
     matching_embeddings.embedding OPERATOR(public.<=>) $3::public.vector AS cosine_distance

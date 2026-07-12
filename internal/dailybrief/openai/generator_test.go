@@ -92,57 +92,17 @@ func TestOpenAIDailyBriefGeneratorRequestsStructuredResponse(t *testing.T) {
 	}
 }
 
-func TestNewOpenAIDailyBriefGeneratorValidatesConfiguration(t *testing.T) {
-	tests := []struct {
-		name   string
-		config Config
-		want   string
-	}{
-		{name: "missing API key", config: Config{Model: "model"}, want: "API key is required"},
-		{name: "missing model", config: Config{APIKey: "key"}, want: "model is required"},
-		{name: "oversized model", config: Config{
-			APIKey: "key", Model: strings.Repeat("m", maxOpenAIModelBytes+1),
-		}, want: "model must not exceed"},
-		{name: "negative request budget", config: Config{
-			APIKey: "key", Model: "model", RequestBudget: -time.Second,
-		}, want: "request budget must not be negative"},
-		{name: "relative endpoint", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "/v1/responses",
-		}, want: "absolute HTTP(S) URL"},
-		{name: "unsupported endpoint scheme", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "file:///tmp/responses",
-		}, want: "absolute HTTP(S) URL"},
-		{name: "remote plaintext endpoint", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "http://api.example.com/v1/responses",
-		}, want: "must use HTTPS unless it targets a loopback host"},
-		{name: "endpoint credentials", config: Config{
-			APIKey: "key", Model: "model", Endpoint: "https://user@example.com/v1/responses",
-		}, want: "without credentials or a fragment"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			generator, err := NewGenerator(test.config)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("newOpenAIDailyBriefGenerator() = (%#v, %v), want error containing %q", generator, err, test.want)
-			}
-		})
+func TestNewOpenAIDailyBriefGeneratorUsesResponsesEndpointDefault(t *testing.T) {
+	if generator, err := NewGenerator(Config{Model: "model"}); err == nil || !strings.Contains(err.Error(), "API key is required") {
+		t.Fatalf("NewGenerator() = (%#v, %v), want shared configuration validation", generator, err)
 	}
 
-	generator, err := NewGenerator(Config{
-		APIKey: " key ", Model: " model ",
-	})
+	generator, err := NewGenerator(Config{APIKey: "key", Model: "model"})
 	if err != nil {
 		t.Fatalf("newOpenAIDailyBriefGenerator() error = %v", err)
 	}
-	if generator.apiKey != "key" || generator.model != "model" ||
-		generator.endpoint != defaultOpenAIResponsesEndpoint ||
-		generator.requestBudget != defaultOpenAIRequestBudget || generator.client == nil {
+	if generator.endpoint != defaultOpenAIResponsesEndpoint {
 		t.Errorf("generator defaults = %#v", generator)
-	}
-	client, ok := generator.client.(*http.Client)
-	if !ok || client.CheckRedirect == nil ||
-		!errors.Is(client.CheckRedirect(&http.Request{}, nil), http.ErrUseLastResponse) {
-		t.Errorf("default HTTP client must reject redirects")
 	}
 }
 

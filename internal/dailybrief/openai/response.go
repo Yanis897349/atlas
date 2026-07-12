@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/Yanis897349/atlas/internal/dailybrief"
+	openaiapi "github.com/Yanis897349/atlas/internal/openai"
 )
 
 type openAIResponsesResponse struct {
@@ -15,10 +16,6 @@ type openAIResponsesResponse struct {
 	Error             *openAIError               `json:"error"`
 	IncompleteDetails *openAIIncompleteDetails   `json:"incomplete_details"`
 	Output            []openAIResponseOutputItem `json:"output"`
-}
-
-type openAIErrorResponse struct {
-	Error *openAIError `json:"error"`
 }
 
 type openAIError struct {
@@ -131,7 +128,7 @@ func decodeOpenAIDailyBriefResponse(body []byte) (dailybrief.Draft, error) {
 
 func openAIIncompleteResponseError(response openAIResponsesResponse) error {
 	if response.Status == "incomplete" && response.IncompleteDetails != nil {
-		reason := sanitizeOpenAIErrorValue(response.IncompleteDetails.Reason)
+		reason := openaiapi.SanitizeErrorValue(response.IncompleteDetails.Reason)
 		if reason != "" {
 			return fmt.Errorf("OpenAI response is incomplete: %s", reason)
 		}

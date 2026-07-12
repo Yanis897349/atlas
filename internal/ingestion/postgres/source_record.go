@@ -68,7 +68,7 @@ func validateSourceRecord(record ingestion.SourceRecord, actor string) error {
 	return nil
 }
 
-const upsertSourceRecordSQL = `
+var upsertSourceRecordSQL = `
 INSERT INTO source_records (
     source,
     source_item_id,
@@ -90,7 +90,7 @@ SET original_url = EXCLUDED.original_url,
 WHERE EXCLUDED.retrieved_at > source_records.retrieved_at
 RETURNING ` + sourceRecordColumns
 
-const selectSourceRecordSQL = `
+var selectSourceRecordSQL = `
 SELECT ` + sourceRecordColumns + `
 FROM source_records
 WHERE source = $1 AND source_item_id = $2`

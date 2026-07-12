@@ -3,10 +3,10 @@ package postgres
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/Yanis897349/atlas/internal/search"
+	"github.com/Yanis897349/atlas/internal/search/vector"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -42,8 +42,8 @@ func normalizeAndValidateEmbeddings(
 		if embedding.Model == "" {
 			return nil, "", fmt.Errorf("embedding %d model is required", index)
 		}
-		if len(embedding.Vector) == 0 {
-			return nil, "", fmt.Errorf("embedding %d vector is required", index)
+		if err := vector.Validate(embedding.Vector); err != nil {
+			return nil, "", fmt.Errorf("embedding %d %w", index, err)
 		}
 		if index == 0 {
 			dimension = len(embedding.Vector)
@@ -55,15 +55,6 @@ func normalizeAndValidateEmbeddings(
 				dimension,
 			)
 		}
-		for valueIndex, value := range embedding.Vector {
-			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-				return nil, "", fmt.Errorf("embedding %d vector value %d must be finite", index, valueIndex)
-			}
-		}
-		if !hasFiniteCosineNorm(embedding.Vector) {
-			return nil, "", fmt.Errorf("embedding %d vector must have finite non-zero cosine norm", index)
-		}
-
 		reference := embeddingReference{
 			sourceRecordID: embedding.SourceRecordID,
 			provider:       embedding.Provider,
@@ -100,29 +91,13 @@ func normalizeAndValidateSimilarityQuery(
 	if model == "" {
 		return "", "", errors.New("model is required")
 	}
-	if len(queryVector) == 0 {
-		return "", "", errors.New("query vector is required")
-	}
-	for index, value := range queryVector {
-		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
-			return "", "", fmt.Errorf("query vector value %d must be finite", index)
-		}
-	}
-	if !hasFiniteCosineNorm(queryVector) {
-		return "", "", errors.New("query vector must have finite non-zero cosine norm")
+	if err := vector.Validate(queryVector); err != nil {
+		return "", "", fmt.Errorf("query %w", err)
 	}
 	if limit < 1 || limit > search.MaxSimilarSourceRecordsLimit {
 		return "", "", fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
 	}
 	return provider, model, nil
-}
-
-func hasFiniteCosineNorm(vector []float32) bool {
-	var squaredNorm float32
-	for _, value := range vector {
-		squaredNorm += value * value
-	}
-	return squaredNorm > 0 && !math.IsInf(float64(squaredNorm), 0)
 }
 
 func normalizeUUID(value string) (string, bool) {

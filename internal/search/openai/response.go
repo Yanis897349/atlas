@@ -3,8 +3,8 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
+	openaiapi "github.com/Yanis897349/atlas/internal/openai"
 	"github.com/Yanis897349/atlas/internal/search"
 )
 
@@ -18,16 +18,6 @@ type embeddingResponseItem struct {
 	Object    string    `json:"object"`
 	Embedding []float32 `json:"embedding"`
 	Index     *int      `json:"index"`
-}
-
-type errorResponse struct {
-	Error *providerErrorDetails `json:"error"`
-}
-
-type providerErrorDetails struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-	Code    string `json:"code"`
 }
 
 func decodeResponse(
@@ -102,28 +92,5 @@ func decodeResponse(
 }
 
 func providerError(statusCode int, body []byte) error {
-	var response errorResponse
-	if err := json.Unmarshal(body, &response); err != nil || response.Error == nil {
-		return fmt.Errorf("OpenAI Embeddings API returned status %d", statusCode)
-	}
-
-	parts := make([]string, 0, 3)
-	for _, value := range []string{response.Error.Type, response.Error.Code, response.Error.Message} {
-		if value = sanitizeErrorValue(value); value != "" {
-			parts = append(parts, value)
-		}
-	}
-	if len(parts) == 0 {
-		return fmt.Errorf("OpenAI Embeddings API returned status %d", statusCode)
-	}
-	return fmt.Errorf("OpenAI Embeddings API returned status %d: %s", statusCode, strings.Join(parts, ": "))
-}
-
-func sanitizeErrorValue(value string) string {
-	value = strings.Join(strings.Fields(value), " ")
-	const maxLength = 256
-	if len(value) > maxLength {
-		return value[:maxLength] + "..."
-	}
-	return value
+	return openaiapi.ProviderError("OpenAI Embeddings API", statusCode, body)
 }

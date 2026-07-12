@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	openaiapi "github.com/Yanis897349/atlas/internal/openai"
 	"github.com/Yanis897349/atlas/internal/search"
 )
 
@@ -19,9 +20,7 @@ const (
 )
 
 // HTTPClient executes OpenAI Embeddings API requests.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
+type HTTPClient = openaiapi.HTTPClient
 
 // Embedder produces source-record vectors through the OpenAI Embeddings API.
 type Embedder struct {
