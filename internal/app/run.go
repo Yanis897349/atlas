@@ -96,6 +96,13 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			stdout,
 		)
 	}
+	if parsedCommand.watchlistCommand != nil {
+		repository, err := watchlistpostgres.NewRepository(pool)
+		if err != nil {
+			return fmt.Errorf("configure watchlist repository: %w", err)
+		}
+		return runWatchlistCommand(ctx, repository, stdout, *parsedCommand.watchlistCommand)
+	}
 	switch parsedCommand.name {
 	case "migrate":
 		if err := databasepostgres.Migrate(ctx, pool); err != nil {
@@ -160,54 +167,6 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			stdout,
 			parsedCommand.storedDailyBriefsQuery,
 		)
-	case "create-watchlist":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runCreateWatchlist(ctx, repository, stdout, parsedCommand.createWatchlistCommand)
-	case "update-watchlist":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runUpdateWatchlist(ctx, repository, stdout, parsedCommand.updateWatchlistCommand)
-	case "delete-watchlist":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runDeleteWatchlist(ctx, repository, parsedCommand.deleteWatchlistCommand)
-	case "watchlist":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runWatchlist(ctx, repository, stdout, parsedCommand.watchlistQuery)
-	case "watchlists":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runWatchlists(ctx, repository, stdout, parsedCommand.watchlistsQuery)
-	case "link-watchlist-event":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runLinkWatchlistEvent(ctx, repository, stdout, parsedCommand.linkWatchlistEvent)
-	case "unlink-watchlist-event":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runUnlinkWatchlistEvent(ctx, repository, parsedCommand.unlinkWatchlistEvent)
-	case "watchlist-events":
-		repository, err := watchlistpostgres.NewRepository(pool)
-		if err != nil {
-			return fmt.Errorf("configure watchlist repository: %w", err)
-		}
-		return runWatchlistEvents(ctx, repository, stdout, parsedCommand.watchlistEventsQuery)
 	default:
 		panic("validated command is not handled")
 	}

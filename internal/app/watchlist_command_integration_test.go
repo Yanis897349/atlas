@@ -80,7 +80,7 @@ SET created_at = CASE WHEN id = $1 THEN $2::timestamptz ELSE $3::timestamptz END
 	}
 	if updated.ID != first.ID || updated.Name != "Updated first" ||
 		!reflect.DeepEqual(updated.Symbols, []string{"DXY", "BRK.B"}) || updated.CreatedBy != "first-user" ||
-		updated.UpdatedBy != "editor" || updated.CreatedAt != formatWatchlistOutputTime(firstTime) ||
+		updated.UpdatedBy != "editor" || updated.CreatedAt != formatOutputTime(firstTime) ||
 		!updatedAt.After(firstTime) {
 		t.Errorf("updated output = %#v, want replaced definition with preserved creation metadata", updated)
 	}
@@ -95,7 +95,7 @@ SET created_at = CASE WHEN id = $1 THEN $2::timestamptz ELSE $3::timestamptz END
 	}
 	if len(output) != 1 || output[0].ID != second.ID || output[0].Name != "Second" ||
 		!reflect.DeepEqual(output[0].Symbols, []string{"BRK.B"}) || output[0].CreatedBy != "second-user" ||
-		output[0].CreatedAt != formatWatchlistOutputTime(secondTime) {
+		output[0].CreatedAt != formatOutputTime(secondTime) {
 		t.Errorf("listed output = %#v, want newest complete watchlist", output)
 	}
 

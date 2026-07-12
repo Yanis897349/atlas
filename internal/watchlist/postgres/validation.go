@@ -28,7 +28,7 @@ func normalizeAndValidateDefinition(
 	symbols := make([]string, len(definition.Symbols))
 	seen := make(map[string]struct{}, len(definition.Symbols))
 	for index, symbol := range definition.Symbols {
-		symbol = normalizeInstrumentSymbol(symbol)
+		symbol = watchlist.NormalizeInstrumentSymbol(symbol)
 		if symbol == "" {
 			return watchlist.Definition{}, "", fmt.Errorf("instrument symbol %d is required", index)
 		}
@@ -83,7 +83,7 @@ func normalizeAndValidateEventLinkReference(watchlistID string, symbol string, e
 		return "", err
 	}
 
-	symbol = normalizeInstrumentSymbol(symbol)
+	symbol = watchlist.NormalizeInstrumentSymbol(symbol)
 	if symbol == "" {
 		return "", errors.New("instrument symbol is required")
 	}
@@ -94,7 +94,7 @@ func normalizeAndValidateEventLinksQuery(watchlistID string, symbol string, limi
 	if err := validateWatchlistID(watchlistID); err != nil {
 		return "", err
 	}
-	symbol = normalizeInstrumentSymbol(symbol)
+	symbol = watchlist.NormalizeInstrumentSymbol(symbol)
 	if symbol == "" {
 		return "", errors.New("instrument symbol is required")
 	}
@@ -110,8 +110,4 @@ func validateEventID(id string) error {
 		return errors.New("event ID must be a UUID")
 	}
 	return nil
-}
-
-func normalizeInstrumentSymbol(symbol string) string {
-	return strings.ToUpper(strings.TrimSpace(symbol))
 }

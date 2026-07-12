@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-
-	"github.com/Yanis897349/atlas/internal/watchlist"
 )
 
 const deleteWatchlistUsage = "usage: atlas delete-watchlist --id <uuid>"
@@ -23,7 +21,7 @@ func parseDeleteWatchlistCommand(arguments []string) (deleteWatchlistCommand, er
 
 func runDeleteWatchlist(
 	ctx context.Context,
-	repository watchlist.Persistence,
+	repository watchlistDeleter,
 	command deleteWatchlistCommand,
 ) error {
 	if err := repository.DeleteWatchlist(ctx, command.id); err != nil {

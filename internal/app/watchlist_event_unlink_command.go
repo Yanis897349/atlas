@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
@@ -56,7 +55,7 @@ func parseUnlinkWatchlistEventCommand(arguments []string) (unlinkWatchlistEventC
 			"unlink-watchlist-event", unlinkWatchlistEventUsage, fmt.Errorf("--event-id must be a UUID"),
 		)
 	}
-	symbol.value = strings.ToUpper(strings.TrimSpace(symbol.value))
+	symbol.value = watchlist.NormalizeInstrumentSymbol(symbol.value)
 	if symbol.value == "" {
 		return unlinkWatchlistEventCommand{}, invalidWatchlistArguments(
 			"unlink-watchlist-event", unlinkWatchlistEventUsage, fmt.Errorf("--symbol must not be blank"),
@@ -71,7 +70,7 @@ func parseUnlinkWatchlistEventCommand(arguments []string) (unlinkWatchlistEventC
 
 func runUnlinkWatchlistEvent(
 	ctx context.Context,
-	repository watchlist.EventLinkPersistence,
+	repository watchlistEventLinkDeleter,
 	command unlinkWatchlistEventCommand,
 ) error {
 	if err := repository.DeleteEventLink(

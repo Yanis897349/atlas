@@ -94,7 +94,7 @@ func TestRunRejectsInvalidWatchlistEventArgumentsBeforeDatabaseSetup(t *testing.
 
 func TestRunLinkWatchlistEventWritesCompleteJSON(t *testing.T) {
 	stored := storedEventLinkFixture()
-	repository := &eventLinkRepositoryStub{links: []watchlist.StoredEventLink{stored}}
+	repository := &eventLinkCreateStub{link: stored}
 	stdout := &bytes.Buffer{}
 	command := linkWatchlistEventCommand{
 		watchlistID: stored.WatchlistID, symbol: stored.Symbol, eventID: stored.Event.ID, actor: stored.CreatedBy,
@@ -124,7 +124,7 @@ func TestRunWatchlistEventsPreservesOrderAndWritesEmptyArray(t *testing.T) {
 	second := first
 	second.ID = "00000000-0000-0000-0000-000000000004"
 	second.Event.ID = "00000000-0000-0000-0000-000000000005"
-	repository := &eventLinkRepositoryStub{links: []watchlist.StoredEventLink{first, second}}
+	repository := &eventLinkListStub{links: []watchlist.StoredEventLink{first, second}}
 	stdout := &bytes.Buffer{}
 	query := watchlistEventsQuery{watchlistID: first.WatchlistID, symbol: first.Symbol, limit: 2}
 	if err := runWatchlistEvents(t.Context(), repository, stdout, query); err != nil {
@@ -155,35 +155,34 @@ func TestRunWatchlistEventCommandsPreserveFailures(t *testing.T) {
 		err      error
 		writer   io.Writer
 		contains string
-		invoke   func(*eventLinkRepositoryStub, io.Writer) error
+		invoke   func(error, io.Writer) error
 	}{
-		{name: "link cancellation", err: context.Canceled, contains: "link watchlist event", invoke: func(repository *eventLinkRepositoryStub, stdout io.Writer) error {
-			return runLinkWatchlistEvent(t.Context(), repository, stdout, linkWatchlistEventCommand{})
+		{name: "link cancellation", err: context.Canceled, contains: "link watchlist event", invoke: func(err error, stdout io.Writer) error {
+			return runLinkWatchlistEvent(t.Context(), &eventLinkCreateStub{err: err}, stdout, linkWatchlistEventCommand{})
 		}},
-		{name: "link duplicate", err: wantErr, contains: "link watchlist event", invoke: func(repository *eventLinkRepositoryStub, stdout io.Writer) error {
-			return runLinkWatchlistEvent(t.Context(), repository, stdout, linkWatchlistEventCommand{})
+		{name: "link duplicate", err: wantErr, contains: "link watchlist event", invoke: func(err error, stdout io.Writer) error {
+			return runLinkWatchlistEvent(t.Context(), &eventLinkCreateStub{err: err}, stdout, linkWatchlistEventCommand{})
 		}},
-		{name: "link writer", writer: errorWriter{err: wantErr}, contains: "encode linked watchlist event", invoke: func(repository *eventLinkRepositoryStub, stdout io.Writer) error {
-			return runLinkWatchlistEvent(t.Context(), repository, stdout, linkWatchlistEventCommand{})
+		{name: "link writer", writer: errorWriter{err: wantErr}, contains: "encode linked watchlist event", invoke: func(err error, stdout io.Writer) error {
+			return runLinkWatchlistEvent(t.Context(), &eventLinkCreateStub{link: storedEventLinkFixture(), err: err}, stdout, linkWatchlistEventCommand{})
 		}},
-		{name: "list cancellation", err: context.Canceled, contains: "retrieve watchlist events", invoke: func(repository *eventLinkRepositoryStub, stdout io.Writer) error {
-			return runWatchlistEvents(t.Context(), repository, stdout, watchlistEventsQuery{})
+		{name: "list cancellation", err: context.Canceled, contains: "retrieve watchlist events", invoke: func(err error, stdout io.Writer) error {
+			return runWatchlistEvents(t.Context(), &eventLinkListStub{err: err}, stdout, watchlistEventsQuery{})
 		}},
-		{name: "list not found", err: wantErr, contains: "retrieve watchlist events", invoke: func(repository *eventLinkRepositoryStub, stdout io.Writer) error {
-			return runWatchlistEvents(t.Context(), repository, stdout, watchlistEventsQuery{})
+		{name: "list not found", err: wantErr, contains: "retrieve watchlist events", invoke: func(err error, stdout io.Writer) error {
+			return runWatchlistEvents(t.Context(), &eventLinkListStub{err: err}, stdout, watchlistEventsQuery{})
 		}},
-		{name: "list writer", writer: errorWriter{err: wantErr}, contains: "encode watchlist events", invoke: func(repository *eventLinkRepositoryStub, stdout io.Writer) error {
-			return runWatchlistEvents(t.Context(), repository, stdout, watchlistEventsQuery{})
+		{name: "list writer", writer: errorWriter{err: wantErr}, contains: "encode watchlist events", invoke: func(err error, stdout io.Writer) error {
+			return runWatchlistEvents(t.Context(), &eventLinkListStub{links: []watchlist.StoredEventLink{storedEventLinkFixture()}, err: err}, stdout, watchlistEventsQuery{})
 		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repository := &eventLinkRepositoryStub{links: []watchlist.StoredEventLink{storedEventLinkFixture()}, err: test.err}
 			var stdout io.Writer = &bytes.Buffer{}
 			if test.writer != nil {
 				stdout = test.writer
 			}
-			err := test.invoke(repository, stdout)
+			err := test.invoke(test.err, stdout)
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
 				t.Fatalf("error = %v, want context %q", err, test.contains)
 			}
@@ -221,20 +220,17 @@ func storedEventLinkFixture() watchlist.StoredEventLink {
 	}
 }
 
-type eventLinkRepositoryStub struct {
-	links       []watchlist.StoredEventLink
+type eventLinkCreateStub struct {
+	link        watchlist.StoredEventLink
 	err         error
 	watchlistID string
 	symbol      string
 	eventID     string
 	actor       string
-	limit       int
 	createCalls int
-	deleteCalls int
-	listCalls   int
 }
 
-func (repository *eventLinkRepositoryStub) CreateEventLink(
+func (repository *eventLinkCreateStub) CreateEventLink(
 	_ context.Context, watchlistID, symbol, eventID, actor string,
 ) (watchlist.StoredEventLink, error) {
 	repository.createCalls++
@@ -243,18 +239,19 @@ func (repository *eventLinkRepositoryStub) CreateEventLink(
 	if repository.err != nil {
 		return watchlist.StoredEventLink{}, repository.err
 	}
-	return repository.links[0], nil
+	return repository.link, nil
 }
 
-func (repository *eventLinkRepositoryStub) DeleteEventLink(
-	_ context.Context, watchlistID, symbol, eventID string,
-) error {
-	repository.deleteCalls++
-	repository.watchlistID, repository.symbol, repository.eventID = watchlistID, symbol, eventID
-	return repository.err
+type eventLinkListStub struct {
+	links       []watchlist.StoredEventLink
+	err         error
+	watchlistID string
+	symbol      string
+	limit       int
+	listCalls   int
 }
 
-func (repository *eventLinkRepositoryStub) EventLinks(
+func (repository *eventLinkListStub) EventLinks(
 	_ context.Context, watchlistID, symbol string, limit int,
 ) ([]watchlist.StoredEventLink, error) {
 	repository.listCalls++

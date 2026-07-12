@@ -21,14 +21,7 @@ type command struct {
 	upcomingEventsQuery      upcomingEventsQuery
 	dailyBriefInputQuery     dailybrief.InputQuery
 	storedDailyBriefsQuery   storedDailyBriefsQuery
-	createWatchlistCommand   createWatchlistCommand
-	updateWatchlistCommand   updateWatchlistCommand
-	deleteWatchlistCommand   deleteWatchlistCommand
-	watchlistQuery           watchlistQuery
-	watchlistsQuery          watchlistsQuery
-	linkWatchlistEvent       linkWatchlistEventCommand
-	unlinkWatchlistEvent     unlinkWatchlistEventCommand
-	watchlistEventsQuery     watchlistEventsQuery
+	watchlistCommand         *watchlistCommand
 }
 
 func parseCommand(arguments []string) (command, error) {
@@ -66,54 +59,14 @@ func parseCommand(arguments []string) (command, error) {
 			return command{}, err
 		}
 		return command{name: arguments[0], storedDailyBriefsQuery: query}, nil
-	case "create-watchlist":
-		createCommand, err := parseCreateWatchlistCommand(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], createWatchlistCommand: createCommand}, nil
-	case "update-watchlist":
-		updateCommand, err := parseUpdateWatchlistCommand(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], updateWatchlistCommand: updateCommand}, nil
-	case "delete-watchlist":
-		deleteCommand, err := parseDeleteWatchlistCommand(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], deleteWatchlistCommand: deleteCommand}, nil
-	case "watchlist":
-		query, err := parseWatchlistQuery(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], watchlistQuery: query}, nil
-	case "watchlists":
-		query, err := parseWatchlistsQuery(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], watchlistsQuery: query}, nil
-	case "link-watchlist-event":
-		linkCommand, err := parseLinkWatchlistEventCommand(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], linkWatchlistEvent: linkCommand}, nil
-	case "unlink-watchlist-event":
-		unlinkCommand, err := parseUnlinkWatchlistEventCommand(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], unlinkWatchlistEvent: unlinkCommand}, nil
-	case "watchlist-events":
-		query, err := parseWatchlistEventsQuery(arguments[1:])
-		if err != nil {
-			return command{}, err
-		}
-		return command{name: arguments[0], watchlistEventsQuery: query}, nil
+	}
+
+	watchlistCommand, recognized, err := parseWatchlistCommand(arguments)
+	if err != nil {
+		return command{}, err
+	}
+	if recognized {
+		return command{name: arguments[0], watchlistCommand: &watchlistCommand}, nil
 	}
 
 	calendarCommand := findCalendarIngestionCommand(arguments[0])

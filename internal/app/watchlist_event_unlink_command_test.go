@@ -58,7 +58,7 @@ func TestRunRejectsInvalidUnlinkWatchlistEventArgumentsBeforeDatabaseSetup(t *te
 }
 
 func TestRunUnlinkWatchlistEventCallsRepository(t *testing.T) {
-	repository := &eventLinkRepositoryStub{}
+	repository := &eventLinkDeleteStub{}
 	command := unlinkWatchlistEventCommand{
 		watchlistID: "00000000-0000-0000-0000-000000000001",
 		symbol:      "SPY",
@@ -77,7 +77,7 @@ func TestRunUnlinkWatchlistEventCallsRepository(t *testing.T) {
 func TestRunUnlinkWatchlistEventPreservesFailures(t *testing.T) {
 	wantErr := errors.New("event unlinking unavailable")
 	for _, err := range []error{context.Canceled, wantErr} {
-		repository := &eventLinkRepositoryStub{err: err}
+		repository := &eventLinkDeleteStub{err: err}
 		got := runUnlinkWatchlistEvent(t.Context(), repository, unlinkWatchlistEventCommand{})
 		if got == nil || !strings.Contains(got.Error(), "unlink watchlist event") {
 			t.Fatalf("runUnlinkWatchlistEvent() error = %v, want contextual failure", got)
@@ -86,6 +86,27 @@ func TestRunUnlinkWatchlistEventPreservesFailures(t *testing.T) {
 			t.Fatalf("runUnlinkWatchlistEvent() error = %v, want wrapped %v", got, err)
 		}
 	}
+}
+
+type eventLinkDeleteStub struct {
+	err         error
+	watchlistID string
+	symbol      string
+	eventID     string
+	deleteCalls int
+}
+
+func (repository *eventLinkDeleteStub) DeleteEventLink(
+	_ context.Context,
+	watchlistID string,
+	symbol string,
+	eventID string,
+) error {
+	repository.deleteCalls++
+	repository.watchlistID = watchlistID
+	repository.symbol = symbol
+	repository.eventID = eventID
+	return repository.err
 }
 
 func validUnlinkWatchlistEventArguments() []string {

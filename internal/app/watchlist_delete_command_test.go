@@ -47,7 +47,7 @@ func TestRunRejectsInvalidDeleteWatchlistArgumentsBeforeDatabaseSetup(t *testing
 }
 
 func TestRunDeleteWatchlistCallsRepository(t *testing.T) {
-	repository := &watchlistRepositoryStub{}
+	repository := &watchlistDeleteStub{}
 	command := deleteWatchlistCommand{id: "00000000-0000-0000-0000-000000000001"}
 
 	if err := runDeleteWatchlist(t.Context(), repository, command); err != nil {
@@ -61,7 +61,7 @@ func TestRunDeleteWatchlistCallsRepository(t *testing.T) {
 func TestRunDeleteWatchlistPreservesFailures(t *testing.T) {
 	wantErr := errors.New("deletion unavailable")
 	for _, err := range []error{context.Canceled, wantErr} {
-		repository := &watchlistRepositoryStub{err: err}
+		repository := &watchlistDeleteStub{err: err}
 		got := runDeleteWatchlist(t.Context(), repository, deleteWatchlistCommand{
 			id: "00000000-0000-0000-0000-000000000001",
 		})
@@ -72,4 +72,16 @@ func TestRunDeleteWatchlistPreservesFailures(t *testing.T) {
 			t.Fatalf("runDeleteWatchlist() error = %v, want wrapped %v", got, err)
 		}
 	}
+}
+
+type watchlistDeleteStub struct {
+	err         error
+	id          string
+	deleteCalls int
+}
+
+func (repository *watchlistDeleteStub) DeleteWatchlist(_ context.Context, id string) error {
+	repository.deleteCalls++
+	repository.id = id
+	return repository.err
 }

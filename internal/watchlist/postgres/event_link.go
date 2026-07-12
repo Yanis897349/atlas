@@ -8,11 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var (
-	_ watchlist.EventLinkPersistence = (*Repository)(nil)
-	_ watchlist.EventLinkReader      = (*Repository)(nil)
-)
-
 // CreateEventLink creates an immutable association between a watchlist instrument and an economic event.
 func (repository *Repository) CreateEventLink(
 	ctx context.Context,

@@ -22,11 +22,6 @@ type Repository struct {
 	db DB
 }
 
-var (
-	_ watchlist.Persistence = (*Repository)(nil)
-	_ watchlist.Reader      = (*Repository)(nil)
-)
-
 // NewRepository returns a watchlist repository backed by db.
 func NewRepository(db DB) (*Repository, error) {
 	if db == nil {

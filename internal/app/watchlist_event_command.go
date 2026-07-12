@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/watchlist"
@@ -39,7 +38,7 @@ type storedEconomicEventOutput struct {
 
 func runLinkWatchlistEvent(
 	ctx context.Context,
-	repository watchlist.EventLinkPersistence,
+	repository watchlistEventLinkCreator,
 	stdout io.Writer,
 	command linkWatchlistEventCommand,
 ) error {
@@ -54,7 +53,7 @@ func runLinkWatchlistEvent(
 
 func runWatchlistEvents(
 	ctx context.Context,
-	repository watchlist.EventLinkReader,
+	repository watchlistEventLinkReader,
 	stdout io.Writer,
 	query watchlistEventsQuery,
 ) error {
@@ -73,8 +72,8 @@ func newWatchlistEventOutput(link watchlist.StoredEventLink) watchlistEventOutpu
 	return watchlistEventOutput{
 		ID: link.ID, WatchlistID: link.WatchlistID, Symbol: link.Symbol,
 		Event:     newStoredEconomicEventOutput(link.Event),
-		CreatedAt: formatWatchlistEventOutputTime(link.CreatedAt),
-		UpdatedAt: formatWatchlistEventOutputTime(link.UpdatedAt),
+		CreatedAt: formatOutputTime(link.CreatedAt),
+		UpdatedAt: formatOutputTime(link.UpdatedAt),
 		CreatedBy: link.CreatedBy, UpdatedBy: link.UpdatedBy,
 	}
 }
@@ -83,13 +82,9 @@ func newStoredEconomicEventOutput(event calendar.StoredEvent) storedEconomicEven
 	return storedEconomicEventOutput{
 		ID: event.ID, Source: event.Source, ExternalEventID: event.ExternalEventID,
 		Name: event.Name, Region: event.Region, EventType: event.Type,
-		ScheduledAt: formatWatchlistEventOutputTime(event.ScheduledAt), SourceURL: event.SourceURL,
-		RetrievedAt: formatWatchlistEventOutputTime(event.RetrievedAt),
-		CreatedAt:   formatWatchlistEventOutputTime(event.CreatedAt), UpdatedAt: formatWatchlistEventOutputTime(event.UpdatedAt),
+		ScheduledAt: formatOutputTime(event.ScheduledAt), SourceURL: event.SourceURL,
+		RetrievedAt: formatOutputTime(event.RetrievedAt),
+		CreatedAt:   formatOutputTime(event.CreatedAt), UpdatedAt: formatOutputTime(event.UpdatedAt),
 		CreatedBy: event.CreatedBy, UpdatedBy: event.UpdatedBy,
 	}
-}
-
-func formatWatchlistEventOutputTime(value time.Time) string {
-	return value.UTC().Format(time.RFC3339Nano)
 }

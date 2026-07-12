@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
@@ -21,7 +20,7 @@ type watchlistOutput struct {
 
 func runCreateWatchlist(
 	ctx context.Context,
-	repository watchlist.Persistence,
+	repository watchlistCreator,
 	stdout io.Writer,
 	command createWatchlistCommand,
 ) error {
@@ -34,7 +33,7 @@ func runCreateWatchlist(
 
 func runUpdateWatchlist(
 	ctx context.Context,
-	repository watchlist.Persistence,
+	repository watchlistUpdater,
 	stdout io.Writer,
 	command updateWatchlistCommand,
 ) error {
@@ -47,7 +46,7 @@ func runUpdateWatchlist(
 
 func runWatchlists(
 	ctx context.Context,
-	repository watchlist.Reader,
+	repository watchlistLister,
 	stdout io.Writer,
 	query watchlistsQuery,
 ) error {
@@ -65,7 +64,7 @@ func runWatchlists(
 
 func runWatchlist(
 	ctx context.Context,
-	repository watchlist.Reader,
+	repository watchlistLookup,
 	stdout io.Writer,
 	query watchlistQuery,
 ) error {
@@ -81,13 +80,9 @@ func newWatchlistOutput(stored watchlist.StoredWatchlist) watchlistOutput {
 		ID:        stored.ID,
 		Name:      stored.Name,
 		Symbols:   append([]string(nil), stored.Symbols...),
-		CreatedAt: formatWatchlistOutputTime(stored.CreatedAt),
-		UpdatedAt: formatWatchlistOutputTime(stored.UpdatedAt),
+		CreatedAt: formatOutputTime(stored.CreatedAt),
+		UpdatedAt: formatOutputTime(stored.UpdatedAt),
 		CreatedBy: stored.CreatedBy,
 		UpdatedBy: stored.UpdatedBy,
 	}
-}
-
-func formatWatchlistOutputTime(value time.Time) string {
-	return value.UTC().Format(time.RFC3339Nano)
 }

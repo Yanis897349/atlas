@@ -64,7 +64,7 @@ func parseLinkWatchlistEventCommand(arguments []string) (linkWatchlistEventComma
 			"link-watchlist-event", linkWatchlistEventUsage, fmt.Errorf("--event-id must be a UUID"),
 		)
 	}
-	symbol.value = strings.ToUpper(strings.TrimSpace(symbol.value))
+	symbol.value = watchlist.NormalizeInstrumentSymbol(symbol.value)
 	actor.value = strings.TrimSpace(actor.value)
 	if symbol.value == "" {
 		return linkWatchlistEventCommand{}, invalidWatchlistArguments(
@@ -111,7 +111,7 @@ func parseWatchlistEventsQuery(arguments []string) (watchlistEventsQuery, error)
 			"watchlist-events", watchlistEventsUsage, fmt.Errorf("--id must be a UUID"),
 		)
 	}
-	symbol.value = strings.ToUpper(strings.TrimSpace(symbol.value))
+	symbol.value = watchlist.NormalizeInstrumentSymbol(symbol.value)
 	if symbol.value == "" {
 		return watchlistEventsQuery{}, invalidWatchlistArguments(
 			"watchlist-events", watchlistEventsUsage, fmt.Errorf("--symbol must not be blank"),

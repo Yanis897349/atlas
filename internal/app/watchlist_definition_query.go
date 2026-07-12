@@ -27,7 +27,7 @@ func normalizeWatchlistCommandDefinition(
 	normalizedSymbols := make([]string, len(symbols))
 	seen := make(map[string]struct{}, len(symbols))
 	for index, symbol := range symbols {
-		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		symbol = watchlist.NormalizeInstrumentSymbol(symbol)
 		if symbol == "" {
 			return watchlist.Definition{}, "", invalidWatchlistArguments(
 				commandName, usage, fmt.Errorf("--symbol %d must not be blank", index+1),

@@ -96,7 +96,7 @@ func TestParseWatchlistQuery(t *testing.T) {
 }
 
 func TestRunCreateWatchlistWritesCompleteJSON(t *testing.T) {
-	repository := &watchlistRepositoryStub{}
+	repository := &watchlistCreateStub{}
 	stdout := &bytes.Buffer{}
 	command := validCreateWatchlistCommand()
 
@@ -127,7 +127,7 @@ func TestRunWatchlistsPreservesRepositoryOrderAndWritesEmptyArray(t *testing.T) 
 	second := first
 	second.ID = "00000000-0000-0000-0000-000000000002"
 	second.Name = "Second"
-	repository := &watchlistRepositoryStub{watchlists: []watchlist.StoredWatchlist{first, second}}
+	repository := &watchlistListStub{watchlists: []watchlist.StoredWatchlist{first, second}}
 	stdout := &bytes.Buffer{}
 
 	if err := runWatchlists(t.Context(), repository, stdout, watchlistsQuery{limit: 2}); err != nil {
@@ -153,7 +153,7 @@ func TestRunWatchlistsPreservesRepositoryOrderAndWritesEmptyArray(t *testing.T) 
 }
 
 func TestRunWatchlistWritesCompleteJSON(t *testing.T) {
-	repository := &watchlistRepositoryStub{watchlist: storedWatchlistFixture()}
+	repository := &watchlistLookupStub{watchlist: storedWatchlistFixture()}
 	stdout := &bytes.Buffer{}
 	query := watchlistQuery{id: "00000000-0000-0000-0000-000000000001"}
 
@@ -180,38 +180,37 @@ func TestRunWatchlistCommandsPreserveFailures(t *testing.T) {
 	wantErr := errors.New("watchlists unavailable")
 	tests := []struct {
 		name     string
-		run      func(watchlist.Persistence, watchlist.Reader, io.Writer) error
+		run      func(error, io.Writer) error
 		err      error
 		writer   io.Writer
 		contains string
 	}{
-		{name: "create cancellation", err: context.Canceled, contains: "create watchlist", run: func(p watchlist.Persistence, _ watchlist.Reader, stdout io.Writer) error {
-			return runCreateWatchlist(t.Context(), p, stdout, validCreateWatchlistCommand())
+		{name: "create cancellation", err: context.Canceled, contains: "create watchlist", run: func(err error, stdout io.Writer) error {
+			return runCreateWatchlist(t.Context(), &watchlistCreateStub{err: err}, stdout, validCreateWatchlistCommand())
 		}},
-		{name: "create writer", writer: errorWriter{err: wantErr}, contains: "encode created watchlist", run: func(p watchlist.Persistence, _ watchlist.Reader, stdout io.Writer) error {
-			return runCreateWatchlist(t.Context(), p, stdout, validCreateWatchlistCommand())
+		{name: "create writer", writer: errorWriter{err: wantErr}, contains: "encode created watchlist", run: func(err error, stdout io.Writer) error {
+			return runCreateWatchlist(t.Context(), &watchlistCreateStub{err: err}, stdout, validCreateWatchlistCommand())
 		}},
-		{name: "list failure", err: wantErr, contains: "retrieve watchlists", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
-			return runWatchlists(t.Context(), r, stdout, watchlistsQuery{limit: 10})
+		{name: "list failure", err: wantErr, contains: "retrieve watchlists", run: func(err error, stdout io.Writer) error {
+			return runWatchlists(t.Context(), &watchlistListStub{err: err}, stdout, watchlistsQuery{limit: 10})
 		}},
-		{name: "list writer", writer: errorWriter{err: wantErr}, contains: "encode watchlists", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
-			return runWatchlists(t.Context(), r, stdout, watchlistsQuery{limit: 10})
+		{name: "list writer", writer: errorWriter{err: wantErr}, contains: "encode watchlists", run: func(err error, stdout io.Writer) error {
+			return runWatchlists(t.Context(), &watchlistListStub{err: err}, stdout, watchlistsQuery{limit: 10})
 		}},
-		{name: "lookup cancellation", err: context.Canceled, contains: "retrieve watchlist", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
-			return runWatchlist(t.Context(), r, stdout, watchlistQuery{id: "00000000-0000-0000-0000-000000000001"})
+		{name: "lookup cancellation", err: context.Canceled, contains: "retrieve watchlist", run: func(err error, stdout io.Writer) error {
+			return runWatchlist(t.Context(), &watchlistLookupStub{err: err}, stdout, watchlistQuery{id: "00000000-0000-0000-0000-000000000001"})
 		}},
-		{name: "lookup writer", writer: errorWriter{err: wantErr}, contains: "encode watchlist", run: func(_ watchlist.Persistence, r watchlist.Reader, stdout io.Writer) error {
-			return runWatchlist(t.Context(), r, stdout, watchlistQuery{id: "00000000-0000-0000-0000-000000000001"})
+		{name: "lookup writer", writer: errorWriter{err: wantErr}, contains: "encode watchlist", run: func(err error, stdout io.Writer) error {
+			return runWatchlist(t.Context(), &watchlistLookupStub{err: err}, stdout, watchlistQuery{id: "00000000-0000-0000-0000-000000000001"})
 		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repository := &watchlistRepositoryStub{err: test.err}
 			var stdout io.Writer = &bytes.Buffer{}
 			if test.writer != nil {
 				stdout = test.writer
 			}
-			err := test.run(repository, repository, stdout)
+			err := test.run(test.err, stdout)
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
 				t.Fatalf("command error = %v, want context %q", err, test.contains)
 			}
@@ -248,22 +247,14 @@ func storedWatchlistFixture() watchlist.StoredWatchlist {
 	}
 }
 
-type watchlistRepositoryStub struct {
-	watchlist   watchlist.StoredWatchlist
-	watchlists  []watchlist.StoredWatchlist
+type watchlistCreateStub struct {
 	err         error
 	definition  watchlist.Definition
 	actor       string
-	id          string
-	limit       int
 	createCalls int
-	updateCalls int
-	deleteCalls int
-	lookupCalls int
-	listCalls   int
 }
 
-func (repository *watchlistRepositoryStub) CreateWatchlist(
+func (repository *watchlistCreateStub) CreateWatchlist(
 	_ context.Context,
 	definition watchlist.Definition,
 	actor string,
@@ -281,40 +272,27 @@ func (repository *watchlistRepositoryStub) CreateWatchlist(
 	return stored, nil
 }
 
-func (repository *watchlistRepositoryStub) UpdateWatchlist(
-	_ context.Context,
-	id string,
-	definition watchlist.Definition,
-	actor string,
-) (watchlist.StoredWatchlist, error) {
-	repository.updateCalls++
-	repository.id = id
-	repository.definition = definition
-	repository.actor = actor
-	if repository.err != nil {
-		return watchlist.StoredWatchlist{}, repository.err
-	}
-	stored := storedWatchlistFixture()
-	stored.ID = id
-	stored.Definition = definition
-	stored.UpdatedAt = stored.UpdatedAt.Add(time.Hour)
-	stored.UpdatedBy = actor
-	return stored, nil
+type watchlistLookupStub struct {
+	watchlist   watchlist.StoredWatchlist
+	err         error
+	id          string
+	lookupCalls int
 }
 
-func (repository *watchlistRepositoryStub) DeleteWatchlist(_ context.Context, id string) error {
-	repository.deleteCalls++
-	repository.id = id
-	return repository.err
-}
-
-func (repository *watchlistRepositoryStub) Watchlist(_ context.Context, id string) (watchlist.StoredWatchlist, error) {
+func (repository *watchlistLookupStub) Watchlist(_ context.Context, id string) (watchlist.StoredWatchlist, error) {
 	repository.lookupCalls++
 	repository.id = id
 	return repository.watchlist, repository.err
 }
 
-func (repository *watchlistRepositoryStub) Watchlists(_ context.Context, limit int) ([]watchlist.StoredWatchlist, error) {
+type watchlistListStub struct {
+	watchlists []watchlist.StoredWatchlist
+	err        error
+	limit      int
+	listCalls  int
+}
+
+func (repository *watchlistListStub) Watchlists(_ context.Context, limit int) ([]watchlist.StoredWatchlist, error) {
 	repository.listCalls++
 	repository.limit = limit
 	return repository.watchlists, repository.err

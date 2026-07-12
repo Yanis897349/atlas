@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
@@ -69,7 +70,7 @@ func TestRunRejectsInvalidUpdateWatchlistArgumentsBeforeDatabaseSetup(t *testing
 }
 
 func TestRunUpdateWatchlistWritesCompleteJSON(t *testing.T) {
-	repository := &watchlistRepositoryStub{}
+	repository := &watchlistUpdateStub{}
 	stdout := &bytes.Buffer{}
 	command := validUpdateWatchlistCommand()
 
@@ -112,7 +113,7 @@ func TestRunUpdateWatchlistPreservesFailuresWithoutJSON(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repository := &watchlistRepositoryStub{err: test.err}
+			repository := &watchlistUpdateStub{err: test.err}
 			stdout := &bytes.Buffer{}
 			var output = interface{ Write([]byte) (int, error) }(stdout)
 			if test.writer {
@@ -152,4 +153,33 @@ func validUpdateWatchlistCommand() updateWatchlistCommand {
 		definition: watchlist.Definition{Name: "Updated focus", Symbols: []string{"DXY", "BRK.B"}},
 		actor:      "editor",
 	}
+}
+
+type watchlistUpdateStub struct {
+	err         error
+	definition  watchlist.Definition
+	actor       string
+	id          string
+	updateCalls int
+}
+
+func (repository *watchlistUpdateStub) UpdateWatchlist(
+	_ context.Context,
+	id string,
+	definition watchlist.Definition,
+	actor string,
+) (watchlist.StoredWatchlist, error) {
+	repository.updateCalls++
+	repository.id = id
+	repository.definition = definition
+	repository.actor = actor
+	if repository.err != nil {
+		return watchlist.StoredWatchlist{}, repository.err
+	}
+	stored := storedWatchlistFixture()
+	stored.ID = id
+	stored.Definition = definition
+	stored.UpdatedAt = stored.UpdatedAt.Add(time.Hour)
+	stored.UpdatedBy = actor
+	return stored, nil
 }
