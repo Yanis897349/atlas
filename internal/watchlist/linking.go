@@ -3,9 +3,15 @@ package watchlist
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
 )
+
+// EventCandidateReader retrieves canonical economic events considered for watchlist linking.
+type EventCandidateReader interface {
+	WatchlistEventCandidates(context.Context, time.Time, time.Time, int) ([]calendar.StoredEvent, error)
+}
 
 // WatchlistReader retrieves persisted watchlist definitions for event linking.
 type WatchlistReader interface {
@@ -15,6 +21,30 @@ type WatchlistReader interface {
 // EventLinkWriter atomically persists relevant watchlist event classifications.
 type EventLinkWriter interface {
 	CreateEventLinks(context.Context, string, []EventRelevance, string) ([]StoredEventLink, error)
+}
+
+// LinkRelevantEventCandidates retrieves candidate events and links those relevant to a persisted watchlist.
+func LinkRelevantEventCandidates(
+	ctx context.Context,
+	candidates EventCandidateReader,
+	reader WatchlistReader,
+	writer EventLinkWriter,
+	watchlistID string,
+	windowStart time.Time,
+	windowEnd time.Time,
+	limit int,
+	actor string,
+) ([]StoredEventLink, error) {
+	events, err := candidates.WatchlistEventCandidates(ctx, windowStart, windowEnd, limit)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve watchlist event candidates: %w", err)
+	}
+
+	links, err := LinkRelevantEvents(ctx, reader, writer, watchlistID, events, actor)
+	if err != nil {
+		return nil, fmt.Errorf("link retrieved watchlist event candidates: %w", err)
+	}
+	return links, nil
 }
 
 // LinkRelevantEvents classifies supplied events for a persisted watchlist and stores relevant links.
