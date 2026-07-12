@@ -65,7 +65,3 @@ func newUpcomingEventOutput(event calendar.StoredEvent) upcomingEventOutput {
 		RetrievedAt:     formatOutputTime(event.RetrievedAt),
 	}
 }
-
-func formatOutputTime(value time.Time) string {
-	return value.UTC().Format(time.RFC3339Nano)
-}
