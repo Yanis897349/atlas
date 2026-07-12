@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Yanis897349/atlas/internal/app/commandoutput"
+	"github.com/Yanis897349/atlas/internal/app/output"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
 
@@ -32,9 +32,9 @@ func runLinkWatchlistEvents(
 		return fmt.Errorf("link watchlist event candidates: %w", err)
 	}
 
-	output := make([]watchlistEventOutput, 0, len(links))
+	result := make([]watchlistEventOutput, 0, len(links))
 	for _, link := range links {
-		output = append(output, newWatchlistEventOutput(link))
+		result = append(result, newWatchlistEventOutput(link))
 	}
-	return commandoutput.EncodeJSON(stdout, "linked watchlist event candidates", output)
+	return output.EncodeJSON(stdout, "linked watchlist event candidates", result)
 }

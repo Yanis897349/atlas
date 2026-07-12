@@ -4,13 +4,13 @@ import (
 	"io"
 	"time"
 
-	"github.com/Yanis897349/atlas/internal/app/commandoutput"
+	"github.com/Yanis897349/atlas/internal/app/output"
 )
 
 func encodeCommandJSON(stdout io.Writer, subject string, value any) error {
-	return commandoutput.EncodeJSON(stdout, subject, value)
+	return output.EncodeJSON(stdout, subject, value)
 }
 
 func formatOutputTime(value time.Time) string {
-	return commandoutput.FormatTime(value)
+	return output.FormatTime(value)
 }

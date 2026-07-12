@@ -1,5 +1,5 @@
-// Package commandoutput provides deterministic Atlas command output formatting.
-package commandoutput
+// Package output provides deterministic Atlas command output formatting.
+package output
 
 import (
 	"encoding/json"

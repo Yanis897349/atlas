@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Yanis897349/atlas/internal/app/commandoutput"
+	"github.com/Yanis897349/atlas/internal/app/output"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
 
@@ -29,7 +29,7 @@ func runCreateWatchlist(
 	if err != nil {
 		return fmt.Errorf("create watchlist: %w", err)
 	}
-	return commandoutput.EncodeJSON(stdout, "created watchlist", newWatchlistOutput(stored))
+	return output.EncodeJSON(stdout, "created watchlist", newWatchlistOutput(stored))
 }
 
 func runUpdateWatchlist(
@@ -42,7 +42,7 @@ func runUpdateWatchlist(
 	if err != nil {
 		return fmt.Errorf("update watchlist: %w", err)
 	}
-	return commandoutput.EncodeJSON(stdout, "updated watchlist", newWatchlistOutput(stored))
+	return output.EncodeJSON(stdout, "updated watchlist", newWatchlistOutput(stored))
 }
 
 func runWatchlists(
@@ -56,11 +56,11 @@ func runWatchlists(
 		return fmt.Errorf("retrieve watchlists: %w", err)
 	}
 
-	output := make([]watchlistOutput, 0, len(stored))
+	result := make([]watchlistOutput, 0, len(stored))
 	for _, item := range stored {
-		output = append(output, newWatchlistOutput(item))
+		result = append(result, newWatchlistOutput(item))
 	}
-	return commandoutput.EncodeJSON(stdout, "watchlists", output)
+	return output.EncodeJSON(stdout, "watchlists", result)
 }
 
 func runWatchlist(
@@ -73,7 +73,7 @@ func runWatchlist(
 	if err != nil {
 		return fmt.Errorf("retrieve watchlist: %w", err)
 	}
-	return commandoutput.EncodeJSON(stdout, "watchlist", newWatchlistOutput(stored))
+	return output.EncodeJSON(stdout, "watchlist", newWatchlistOutput(stored))
 }
 
 func newWatchlistOutput(stored watchlist.StoredWatchlist) watchlistOutput {
@@ -81,8 +81,8 @@ func newWatchlistOutput(stored watchlist.StoredWatchlist) watchlistOutput {
 		ID:        stored.ID,
 		Name:      stored.Name,
 		Symbols:   append([]string(nil), stored.Symbols...),
-		CreatedAt: commandoutput.FormatTime(stored.CreatedAt),
-		UpdatedAt: commandoutput.FormatTime(stored.UpdatedAt),
+		CreatedAt: output.FormatTime(stored.CreatedAt),
+		UpdatedAt: output.FormatTime(stored.UpdatedAt),
 		CreatedBy: stored.CreatedBy,
 		UpdatedBy: stored.UpdatedBy,
 	}
