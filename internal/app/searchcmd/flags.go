@@ -20,6 +20,6 @@ func (value *singleString) Set(input string) error {
 	return nil
 }
 
-func invalidArguments(err error) error {
+func invalidIndexSourceRecordsArguments(err error) error {
 	return fmt.Errorf("invalid index-source-records arguments: %w; %s", err, indexSourceRecordsUsage)
 }

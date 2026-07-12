@@ -29,10 +29,10 @@ func parseIndexSourceRecordsCommand(arguments []string) (indexSourceRecordsComma
 	flags.Var(&limitValue, "limit", "maximum source record count")
 	flags.Var(&actor, "actor", "audit actor")
 	if err := flags.Parse(arguments); err != nil {
-		return indexSourceRecordsCommand{}, invalidArguments(err)
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(err)
 	}
 	if flags.NArg() != 0 {
-		return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf("unexpected positional arguments"))
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf("unexpected positional arguments"))
 	}
 
 	for _, required := range []struct {
@@ -40,31 +40,31 @@ func parseIndexSourceRecordsCommand(arguments []string) (indexSourceRecordsComma
 		value *singleString
 	}{{"from", &from}, {"to", &to}, {"limit", &limitValue}, {"actor", &actor}} {
 		if !required.value.provided {
-			return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf("--%s is required", required.name))
+			return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf("--%s is required", required.name))
 		}
 	}
 
 	windowStart, err := time.Parse(time.RFC3339, from.value)
 	if err != nil {
-		return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf("--from must be RFC3339: %w", err))
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf("--from must be RFC3339: %w", err))
 	}
 	windowEnd, err := time.Parse(time.RFC3339, to.value)
 	if err != nil {
-		return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf("--to must be RFC3339: %w", err))
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf("--to must be RFC3339: %w", err))
 	}
 	if windowEnd.Before(windowStart) {
-		return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf("--to must not be before --from"))
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf("--to must not be before --from"))
 	}
 
 	limit, err := strconv.Atoi(limitValue.value)
 	if err != nil || limit < 1 || limit > ingestion.MaxRecentSourceRecordsLimit {
-		return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf(
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf(
 			"--limit must be between 1 and %d", ingestion.MaxRecentSourceRecordsLimit,
 		))
 	}
 	actor.value = strings.TrimSpace(actor.value)
 	if actor.value == "" {
-		return indexSourceRecordsCommand{}, invalidArguments(fmt.Errorf("--actor must not be blank"))
+		return indexSourceRecordsCommand{}, invalidIndexSourceRecordsArguments(fmt.Errorf("--actor must not be blank"))
 	}
 
 	return indexSourceRecordsCommand{

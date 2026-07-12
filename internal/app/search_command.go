@@ -49,5 +49,5 @@ func runSearchCommand(
 	if err != nil {
 		return fmt.Errorf("configure source record embedding repository: %w", err)
 	}
-	return searchcmd.Run(ctx, sourceRepository, embedder, embeddingRepository, stdout, command)
+	return searchcmd.Run(ctx, sourceRepository, embedder, embeddingRepository, embeddingRepository, stdout, command)
 }

@@ -217,6 +217,9 @@ mise exec -- go run ./cmd/atlas index-source-records \
   --to 2026-07-11T12:00:00Z \
   --limit 50 \
   --actor search-indexer
+mise exec -- go run ./cmd/atlas search-source-records \
+  --query 'central bank policy outlook' \
+  --limit 10
 mise exec -- go run ./cmd/atlas create-watchlist \
   --name 'Macro focus' \
   --actor analyst \
@@ -263,7 +266,9 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 
 `daily-briefs` reads persisted briefs for one supported region over an inclusive RFC 3339 creation window, with a limit from 1 through 100. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each brief's original input windows, provider and model provenance, ordered sections and canonical citations, and audit metadata. The command does not call an AI provider or modify stored briefs.
 
-`index-source-records` reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs one bounded provider request without retries, and repeated indexing is idempotent for unchanged vectors. Automatic ingestion hooks, scheduling, pagination, semantic query commands, and body or content embeddings remain deferred.
+`index-source-records` reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs one bounded provider request without retries, and repeated indexing is idempotent for unchanged vectors. Automatic ingestion hooks, scheduling, pagination, and body or content embeddings remain deferred.
+
+`search-source-records` accepts one exact non-blank text query and a result limit from 1 through 100. It embeds the query through the configured OpenAI Embeddings API model and retrieves only stored vectors with matching normalized provider, model, and dimension, ordered by exact pgvector cosine distance and source-record UUID for ties. The command emits each complete canonical source record with UTC timestamps, persistence audit metadata, provider and model provenance, and cosine distance; no matches are represented as `[]`. Publication-window and source filters, pagination, hybrid or lexical ranking, HTTP delivery, and UI presentation remain deferred.
 
 `create-watchlist` atomically persists one user-authored watchlist. It requires a name, an audit actor, and one or more ordered `--symbol` flags; names and actors are trimmed, while symbols are trimmed, canonicalized to uppercase, and rejected when empty or duplicated after normalization. The command emits the complete stored definition with its UUID and audit metadata as JSON.
 
