@@ -170,10 +170,12 @@ mise exec -- make ci
 
 ### Run one ingestion cycle
 
-Atlas application commands require `ATLAS_DATABASE_URL`. Keep this application database separate from `ATLAS_TEST_DATABASE_URL`, which integration tests isolate and clean up. Apply migrations explicitly before ingestion:
+Atlas application commands require `ATLAS_DATABASE_URL`. Keep this application database separate from `ATLAS_TEST_DATABASE_URL`, which integration tests isolate and clean up. RSS ingestion also requires `ATLAS_OPENAI_API_KEY` and `ATLAS_OPENAI_EMBEDDING_MODEL` because it automatically indexes the canonical records it stores. Apply migrations explicitly before ingestion:
 
 ```sh
 export ATLAS_DATABASE_URL='postgres://postgres:postgres@localhost:5432/atlas?sslmode=disable'
+export ATLAS_OPENAI_API_KEY='replace-with-an-api-key'
+export ATLAS_OPENAI_EMBEDDING_MODEL='replace-with-an-embeddings-api-model'
 mise exec -- go run ./cmd/atlas migrate
 mise exec -- go run ./cmd/atlas ingest-rss
 mise exec -- go run ./cmd/atlas ingest-bls
@@ -196,7 +198,6 @@ mise exec -- go run ./cmd/atlas daily-brief-input \
   --event-from 2026-07-11T12:00:00Z \
   --event-to 2026-07-18T12:00:00Z \
   --upcoming-event-limit 25
-export ATLAS_OPENAI_API_KEY='replace-with-an-api-key'
 export ATLAS_OPENAI_MODEL='replace-with-a-responses-api-model'
 mise exec -- go run ./cmd/atlas daily-brief \
   --region united_states \
@@ -211,7 +212,6 @@ mise exec -- go run ./cmd/atlas daily-briefs \
   --from 2026-07-01T00:00:00Z \
   --to 2026-08-01T00:00:00Z \
   --limit 25
-export ATLAS_OPENAI_EMBEDDING_MODEL='replace-with-an-embeddings-api-model'
 mise exec -- go run ./cmd/atlas index-source-records \
   --from 2026-07-10T12:00:00Z \
   --to 2026-07-11T12:00:00Z \
@@ -256,7 +256,7 @@ mise exec -- go run ./cmd/atlas watchlist-events \
   --limit 25
 ```
 
-`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, while `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, `ingest-census`, `ingest-eurostat`, and `ingest-spglobal` do the same for supported releases from the official BLS calendar, regular meetings from the official Federal Reserve FOMC calendar, monetary policy meetings from the official ECB calendar, national GDP estimates from the official BEA release schedule, retail-sales releases from the official Census calendar, current-year Euro-area quarterly GDP and monthly retail-sales releases from the official Eurostat calendar, and Eurozone flash PMI releases from the S&P Global PMI calendar. All ingestion commands exit after one cycle and are idempotent: repeated cycles update newer retrieval metadata without creating duplicate records. Scheduling and continuous workers are intentionally not part of these commands.
+`migrate` applies pending schema changes transactionally and is safe to repeat. `ingest-rss` performs one bounded InvestingLive fetch-to-persist cycle, then embeds the exact canonical stored titles in feed order and atomically persists their provider- and model-specific pgvector representations under the RSS ingestion audit identity. Empty feeds make no embedding request, repeated cycles safely retry both source and embedding upserts, and an indexing failure leaves the canonical source rows persisted while returning an error without ingestion success output. `ingest-bls`, `ingest-fed`, `ingest-ecb`, `ingest-bea`, `ingest-census`, `ingest-eurostat`, and `ingest-spglobal` ingest supported official calendar releases without source-record embedding. All ingestion commands exit after one cycle; scheduling, continuous workers, recovery queues, and non-RSS automatic indexing are intentionally not part of these commands.
 
 `upcoming-events` reads one supported region (`united_states` or `eurozone`) over an inclusive RFC 3339 time window. Its limit must be from 1 through 100. The command emits a JSON array ordered by scheduled time and event ID, retaining each event's source identity and citation URL; it does not ingest or modify records.
 
@@ -266,7 +266,7 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 
 `daily-briefs` reads persisted briefs for one supported region over an inclusive RFC 3339 creation window, with a limit from 1 through 100. It emits a JSON array ordered by creation time newest first and UUID for ties, preserving each brief's original input windows, provider and model provenance, ordered sections and canonical citations, and audit metadata. The command does not call an AI provider or modify stored briefs.
 
-`index-source-records` reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs one bounded provider request without retries, and repeated indexing is idempotent for unchanged vectors. Automatic ingestion hooks, scheduling, pagination, and body or content embeddings remain deferred.
+`index-source-records` remains available for bounded backfills. It reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs the bounded provider requests required by input count and encoded payload size without retries, and repeated indexing is idempotent for unchanged vectors. Scheduling, pagination, non-RSS hooks, and body or content embeddings remain deferred.
 
 `search-source-records` accepts one exact non-blank text query and a result limit from 1 through 100. It embeds the query through the configured OpenAI Embeddings API model and retrieves only stored vectors with matching normalized provider, model, and dimension, ordered by exact pgvector cosine distance and source-record UUID for ties. The command emits each complete canonical source record with UTC timestamps, persistence audit metadata, provider and model provenance, and cosine distance; no matches are represented as `[]`. Publication-window and source filters, pagination, hybrid or lexical ranking, HTTP delivery, and UI presentation remain deferred.
 

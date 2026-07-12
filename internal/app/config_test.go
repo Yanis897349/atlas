@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -52,5 +53,18 @@ func TestRunRecognizesCommandsBeforeRequiringApplicationDatabaseURL(t *testing.T
 				t.Fatalf("Run(%q) error = %v, want missing ATLAS_DATABASE_URL error", command, err)
 			}
 		})
+	}
+}
+
+func TestRunIngestRSSRequiresEmbeddingConfigurationBeforeConnecting(t *testing.T) {
+	err := Run(t.Context(), []string{"ingest-rss"}, Dependencies{Getenv: func(name string) string {
+		if name == "ATLAS_DATABASE_URL" {
+			return "postgres://atlas:secret@localhost:1/atlas?sslmode=disable"
+		}
+		return ""
+	}})
+	if err == nil || !strings.Contains(err.Error(), "configure OpenAI source record embedder") ||
+		!strings.Contains(err.Error(), "API key is required") {
+		t.Fatalf("Run(ingest-rss) error = %v, want embedding configuration failure before database connection", err)
 	}
 }

@@ -10,23 +10,31 @@ type Fetcher interface {
 	Fetch(context.Context) ([]SourceRecord, error)
 }
 
-// Repository persists normalized source records.
+// Repository upserts normalized source records and returns their canonical stored form.
 type Repository interface {
-	PersistSourceRecord(context.Context, SourceRecord, string) error
+	UpsertSourceRecord(context.Context, SourceRecord, string) (StoredSourceRecord, error)
 }
 
-// Ingest fetches one source and persists every normalized record.
-func Ingest(ctx context.Context, fetcher Fetcher, repository Repository, actor string) (int, error) {
+// Ingest fetches one source and returns every canonical stored record in fetch order.
+func Ingest(
+	ctx context.Context,
+	fetcher Fetcher,
+	repository Repository,
+	actor string,
+) ([]StoredSourceRecord, error) {
 	records, err := fetcher.Fetch(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("fetch source records: %w", err)
+		return nil, fmt.Errorf("fetch source records: %w", err)
 	}
 
+	storedRecords := make([]StoredSourceRecord, 0, len(records))
 	for index, record := range records {
-		if err := repository.PersistSourceRecord(ctx, record, actor); err != nil {
-			return index, fmt.Errorf("persist source record %d: %w", index+1, err)
+		stored, err := repository.UpsertSourceRecord(ctx, record, actor)
+		if err != nil {
+			return storedRecords, fmt.Errorf("persist source record %d: %w", index+1, err)
 		}
+		storedRecords = append(storedRecords, stored)
 	}
 
-	return len(records), nil
+	return storedRecords, nil
 }

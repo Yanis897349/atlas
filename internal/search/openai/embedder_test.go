@@ -75,6 +75,100 @@ func TestEmbedderRequestsOrderedFloatEmbeddingsAndRestoresIdentity(t *testing.T)
 	}
 }
 
+func TestEmbedderSplitsOversizedInputCountAndPreservesIdentity(t *testing.T) {
+	inputs := make([]search.EmbeddingInput, maxBatchSize+1)
+	for index := range inputs {
+		inputs[index] = search.EmbeddingInput{
+			SourceRecordID: fmt.Sprintf("record-%d", index),
+			Text:           fmt.Sprintf("Title %d", index),
+		}
+	}
+	requestSizes := make([]int, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		var providerRequest embeddingsRequest
+		if err := json.NewDecoder(request.Body).Decode(&providerRequest); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		requestSizes = append(requestSizes, len(providerRequest.Input))
+		data := make([]map[string]any, 0, len(providerRequest.Input))
+		for index := len(providerRequest.Input) - 1; index >= 0; index-- {
+			var sourceIndex int
+			if _, err := fmt.Sscanf(providerRequest.Input[index], "Title %d", &sourceIndex); err != nil {
+				t.Errorf("parse input title: %v", err)
+			}
+			data = append(data, map[string]any{
+				"object": "embedding", "index": index, "embedding": []float32{float32(sourceIndex + 1)},
+			})
+		}
+		response.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(response).Encode(map[string]any{
+			"object": "list", "model": "test-model", "data": data,
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	got, err := newTestEmbedder(t, server).Embed(t.Context(), inputs)
+	if err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+	if !reflect.DeepEqual(requestSizes, []int{maxBatchSize, 1}) {
+		t.Errorf("request sizes = %#v, want [%d 1]", requestSizes, maxBatchSize)
+	}
+	if len(got.Embeddings) != len(inputs) {
+		t.Fatalf("embedding count = %d, want %d", len(got.Embeddings), len(inputs))
+	}
+	for _, index := range []int{0, maxBatchSize - 1, maxBatchSize} {
+		if got.Embeddings[index].SourceRecordID != inputs[index].SourceRecordID ||
+			!reflect.DeepEqual(got.Embeddings[index].Vector, []float32{float32(index + 1)}) {
+			t.Errorf("embedding %d = %#v, want identity %q and ordered vector", index, got.Embeddings[index], inputs[index].SourceRecordID)
+		}
+	}
+}
+
+func TestEmbedderSplitsRequestsByEncodedPayloadSize(t *testing.T) {
+	largeTitle := strings.Repeat("x", maxRequestBytes/2+100)
+	inputs := []search.EmbeddingInput{
+		{SourceRecordID: "record-1", Text: largeTitle},
+		{SourceRecordID: "record-2", Text: largeTitle},
+		{SourceRecordID: "record-3", Text: "small"},
+	}
+	requestSizes := make([]int, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.ContentLength > maxRequestBytes {
+			t.Errorf("request Content-Length = %d, want at most %d", request.ContentLength, maxRequestBytes)
+		}
+		var providerRequest embeddingsRequest
+		if err := json.NewDecoder(request.Body).Decode(&providerRequest); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		requestSizes = append(requestSizes, len(providerRequest.Input))
+		data := make([]map[string]any, len(providerRequest.Input))
+		for index := range providerRequest.Input {
+			data[index] = map[string]any{"object": "embedding", "index": index, "embedding": []float32{1}}
+		}
+		response.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(response).Encode(map[string]any{
+			"object": "list", "model": "test-model", "data": data,
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	got, err := newTestEmbedder(t, server).Embed(t.Context(), inputs)
+	if err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+	if !reflect.DeepEqual(requestSizes, []int{1, 2}) {
+		t.Errorf("request sizes = %#v, want [1 2] payload-bounded batches", requestSizes)
+	}
+	if len(got.Embeddings) != len(inputs) {
+		t.Errorf("embedding count = %d, want %d", len(got.Embeddings), len(inputs))
+	}
+}
+
 func TestNewEmbedderUsesEmbeddingEndpointDefault(t *testing.T) {
 	if embedder, err := NewEmbedder(Config{Model: "model"}); err == nil || !strings.Contains(err.Error(), "API key is required") {
 		t.Fatalf("NewEmbedder() = (%#v, %v), want shared configuration validation", embedder, err)
@@ -103,9 +197,6 @@ func TestEmbedderRejectsBoundedRequestsBeforeHTTP(t *testing.T) {
 	}{
 		{name: "cancelled context", ctx: cancelledContext, inputs: validInputs, contains: "context canceled"},
 		{name: "empty batch", ctx: t.Context, inputs: func() []search.EmbeddingInput { return nil }, contains: "batch is required"},
-		{name: "oversized batch", ctx: t.Context, inputs: func() []search.EmbeddingInput {
-			return make([]search.EmbeddingInput, maxBatchSize+1)
-		}, contains: fmt.Sprintf("must not exceed %d items", maxBatchSize)},
 		{name: "oversized request", ctx: t.Context, inputs: func() []search.EmbeddingInput {
 			return []search.EmbeddingInput{{SourceRecordID: "record-1", Text: strings.Repeat("x", maxRequestBytes)}}
 		}, contains: fmt.Sprintf("request exceeds %d bytes", maxRequestBytes)},

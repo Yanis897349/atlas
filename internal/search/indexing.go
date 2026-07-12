@@ -33,10 +33,20 @@ func IndexSourceRecordEmbeddings(
 	if err != nil {
 		return nil, fmt.Errorf("retrieve source records for embedding indexing: %w", err)
 	}
+	return IndexStoredSourceRecords(ctx, records, embedder, writer, actor)
+}
 
+// IndexStoredSourceRecords embeds and persists already-selected canonical source records.
+func IndexStoredSourceRecords(
+	ctx context.Context,
+	records []ingestion.StoredSourceRecord,
+	embedder Embedder,
+	writer SourceRecordEmbeddingWriter,
+	actor string,
+) ([]SourceRecordEmbedding, error) {
 	embeddings, err := EmbedSourceRecords(ctx, embedder, records)
 	if err != nil {
-		return nil, fmt.Errorf("embed retrieved source records for indexing: %w", err)
+		return nil, fmt.Errorf("embed source records for indexing: %w", err)
 	}
 
 	if err := writer.PersistSourceRecordEmbeddings(ctx, embeddings, actor); err != nil {

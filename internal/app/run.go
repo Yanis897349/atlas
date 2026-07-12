@@ -38,6 +38,7 @@ type Dependencies struct {
 	Getenv                        func(string) string
 	RSSHTTPClient                 rss.HTTPClient
 	RSSFeedURL                    string
+	RSSNow                        func() time.Time
 	RSSWait                       func(context.Context, time.Duration) error
 	BEA                           CalendarSourceDependencies
 	BLS                           CalendarSourceDependencies
@@ -78,7 +79,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		}
 	}
 	sourceRecordEmbedder, err := configuredSourceRecordEmbedder(
-		parsedCommand.searchCommand != nil,
+		parsedCommand.searchCommand != nil || parsedCommand.name == "ingest-rss",
 		getenv,
 		dependencies,
 	)
@@ -134,7 +135,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		_, _ = fmt.Fprintln(stdout, "database migrations applied")
 		return nil
 	case "ingest-rss":
-		return runRSSIngestion(ctx, pool, dependencies, stdout)
+		return runRSSIngestion(ctx, pool, sourceRecordEmbedder, dependencies, stdout)
 	case "upcoming-events":
 		repository, err := calendarpostgres.NewRepository(pool)
 		if err != nil {

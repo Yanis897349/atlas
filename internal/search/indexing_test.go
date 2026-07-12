@@ -132,8 +132,8 @@ func TestIndexSourceRecordEmbeddingsPreservesDependencyFailures(t *testing.T) {
 	}{
 		{name: "retrieval", readerErr: dependencyError, contains: "retrieve source records for embedding indexing"},
 		{name: "retrieval cancellation", readerErr: context.Canceled, contains: "retrieve source records for embedding indexing"},
-		{name: "provider", embedErr: dependencyError, contains: "embed retrieved source records for indexing"},
-		{name: "provider cancellation", embedErr: context.Canceled, contains: "embed retrieved source records for indexing"},
+		{name: "provider", embedErr: dependencyError, contains: "embed source records for indexing"},
+		{name: "provider cancellation", embedErr: context.Canceled, contains: "embed source records for indexing"},
 		{name: "persistence", writerErr: dependencyError, contains: "persist indexed source record embeddings"},
 		{name: "persistence cancellation", writerErr: context.Canceled, contains: "persist indexed source record embeddings"},
 	}

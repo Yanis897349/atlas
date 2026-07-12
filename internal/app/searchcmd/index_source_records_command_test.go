@@ -175,7 +175,7 @@ func TestRunIndexSourceRecordsPreservesFailuresWithoutOutput(t *testing.T) {
 	}{
 		{name: "retrieval", reader: &sourceRecordReaderStub{err: wantErr}, embedder: panicEmbedder{}, writer: &embeddingWriterStub{}, stdout: &bytes.Buffer{}, contains: "retrieve source records"},
 		{name: "cancellation", reader: &sourceRecordReaderStub{err: context.Canceled}, embedder: panicEmbedder{}, writer: &embeddingWriterStub{}, stdout: &bytes.Buffer{}, contains: "retrieve source records"},
-		{name: "provider", reader: &sourceRecordReaderStub{records: records}, embedder: &embedderStub{err: wantErr}, writer: &embeddingWriterStub{}, stdout: &bytes.Buffer{}, contains: "embed retrieved source records"},
+		{name: "provider", reader: &sourceRecordReaderStub{records: records}, embedder: &embedderStub{err: wantErr}, writer: &embeddingWriterStub{}, stdout: &bytes.Buffer{}, contains: "embed source records"},
 		{name: "persistence", reader: &sourceRecordReaderStub{records: records}, embedder: &embedderStub{batch: validBatch}, writer: &embeddingWriterStub{err: wantErr}, stdout: &bytes.Buffer{}, contains: "persist indexed"},
 		{name: "writer", reader: &sourceRecordReaderStub{records: records}, embedder: &embedderStub{batch: validBatch}, writer: &embeddingWriterStub{}, stdout: errorWriter{err: wantErr}, contains: "write indexed source records"},
 		{name: "short writer", reader: &sourceRecordReaderStub{records: records}, embedder: &embedderStub{batch: validBatch}, writer: &embeddingWriterStub{}, stdout: shortWriter{}, contains: "short write"},

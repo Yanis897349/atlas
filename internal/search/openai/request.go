@@ -15,6 +15,8 @@ type embeddingsRequest struct {
 	EncodingFormat string   `json:"encoding_format"`
 }
 
+var errRequestExceedsLimit = errors.New("OpenAI embeddings request exceeds byte limit")
+
 func newRequest(ctx context.Context, model string, inputs []search.EmbeddingInput) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -39,10 +41,48 @@ func newRequest(ctx context.Context, model string, inputs []search.EmbeddingInpu
 		return nil, err
 	}
 	if len(request) > maxRequestBytes {
-		return nil, fmt.Errorf("OpenAI embeddings request exceeds %d bytes", maxRequestBytes)
+		return nil, fmt.Errorf("OpenAI embeddings request exceeds %d bytes: %w", maxRequestBytes, errRequestExceedsLimit)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return request, nil
+}
+
+func nextRequest(
+	ctx context.Context,
+	model string,
+	inputs []search.EmbeddingInput,
+) ([]byte, int, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	if len(inputs) == 0 {
+		return nil, 0, errors.New("embedding input batch is required")
+	}
+
+	high := min(len(inputs), maxBatchSize)
+	low := 1
+	var request []byte
+	count := 0
+	for low <= high {
+		candidateCount := low + (high-low)/2
+		candidate, err := newRequest(ctx, model, inputs[:candidateCount])
+		if err == nil {
+			request = candidate
+			count = candidateCount
+			low = candidateCount + 1
+			continue
+		}
+		if errors.Is(err, errRequestExceedsLimit) {
+			high = candidateCount - 1
+			continue
+		}
+		return nil, 0, err
+	}
+	if count == 0 {
+		_, err := newRequest(ctx, model, inputs[:1])
+		return nil, 0, err
+	}
+	return request, count, nil
 }

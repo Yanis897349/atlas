@@ -7,8 +7,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,19 +27,56 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 	}))
 	t.Cleanup(feed.Close)
 
+	var providerCalls atomic.Int32
+	embeddings := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		providerCalls.Add(1)
+		if request.Method != http.MethodPost || request.URL.Path != "/v1/embeddings" {
+			t.Errorf("embedding request = %s %s, want POST /v1/embeddings", request.Method, request.URL.Path)
+		}
+		if request.Header.Get("Authorization") != "Bearer rss-secret" {
+			t.Errorf("embedding authorization = %q, want RSS credential", request.Header.Get("Authorization"))
+		}
+		var input struct {
+			Model string   `json:"model"`
+			Texts []string `json:"input"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			t.Errorf("decode embedding request: %v", err)
+		}
+		if input.Model != "rss-embedding-model" || !reflect.DeepEqual(input.Texts, []string{"Story one", "Story two"}) {
+			t.Errorf("embedding input = %#v, want exact feed-order titles", input)
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"object":"list","model":"rss-embedding-model","data":[{"object":"embedding","index":1,"embedding":[3,4]},{"object":"embedding","index":0,"embedding":[1,2]}]}`))
+	}))
+	t.Cleanup(embeddings.Close)
+
 	dependencies := Dependencies{
-		Getenv:        applicationDatabaseEnv(database.URL),
-		RSSHTTPClient: feed.Client(),
-		RSSFeedURL:    feed.URL,
+		Getenv: func(name string) string {
+			return map[string]string{
+				"ATLAS_DATABASE_URL":           database.URL,
+				"ATLAS_OPENAI_API_KEY":         "rss-secret",
+				"ATLAS_OPENAI_EMBEDDING_MODEL": "rss-embedding-model",
+			}[name]
+		},
+		RSSHTTPClient:            feed.Client(),
+		RSSFeedURL:               feed.URL,
+		OpenAIHTTPClient:         embeddings.Client(),
+		OpenAIEmbeddingsEndpoint: embeddings.URL + "/v1/embeddings",
 	}
 	for range 2 {
 		if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
 			t.Fatalf("Run(migrate) error = %v", err)
 		}
 	}
-	for range 2 {
+	for iteration := range 2 {
+		stdout := &bytes.Buffer{}
+		dependencies.Stdout = stdout
 		if err := Run(t.Context(), []string{"ingest-rss"}, dependencies); err != nil {
 			t.Fatalf("Run(ingest-rss) error = %v", err)
+		}
+		if stdout.String() != "ingested 2 InvestingLive RSS records\n" {
+			t.Errorf("ingestion %d output = %q, want success count", iteration+1, stdout.String())
 		}
 	}
 
@@ -47,6 +86,52 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("source record count = %d, want 2", count)
+	}
+	if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM source_record_embeddings").Scan(&count); err != nil {
+		t.Fatalf("count source record embeddings: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("source record embedding count = %d, want 2", count)
+	}
+	var titles []string
+	rows, err := database.Pool.Query(t.Context(), `
+SELECT sr.title
+FROM source_record_embeddings sre
+JOIN source_records sr ON sr.id = sre.source_record_id
+ORDER BY sr.published_at
+`)
+	if err != nil {
+		t.Fatalf("load indexed source records: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			t.Fatalf("scan indexed title: %v", err)
+		}
+		titles = append(titles, title)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate indexed titles: %v", err)
+	}
+	if !reflect.DeepEqual(titles, []string{"Story one", "Story two"}) {
+		t.Errorf("indexed titles = %#v, want canonical feed records", titles)
+	}
+	var provider, model, createdBy, updatedBy string
+	var vector string
+	if err := database.Pool.QueryRow(t.Context(), `
+SELECT provider, model, embedding::text, created_by, updated_by
+FROM source_record_embeddings
+LIMIT 1
+`).Scan(&provider, &model, &vector, &createdBy, &updatedBy); err != nil {
+		t.Fatalf("load embedding provenance: %v", err)
+	}
+	if provider != "openai" || model != "rss-embedding-model" || strings.Count(vector, ",") != 1 ||
+		createdBy != rssIngestionActor || updatedBy != rssIngestionActor {
+		t.Errorf("embedding metadata = (%q, %q, %q, %q, %q), want normalized provenance, dimension 2, and RSS audit actor", provider, model, vector, createdBy, updatedBy)
+	}
+	if providerCalls.Load() != 2 {
+		t.Errorf("provider calls = %d, want one per ingestion cycle", providerCalls.Load())
 	}
 	if err := database.Pool.QueryRow(t.Context(), "SELECT count(*) FROM economic_events").Scan(&count); err != nil {
 		t.Fatalf("count economic events: %v", err)
@@ -58,7 +143,13 @@ func TestRunIngestsRSSIdempotentlyEndToEnd(t *testing.T) {
 
 func TestRunReportsIngestionFailureAndCancellation(t *testing.T) {
 	database := postgrestest.Open(t)
-	dependencies := Dependencies{Getenv: applicationDatabaseEnv(database.URL)}
+	dependencies := Dependencies{Getenv: func(name string) string {
+		return map[string]string{
+			"ATLAS_DATABASE_URL":           database.URL,
+			"ATLAS_OPENAI_API_KEY":         "rss-secret",
+			"ATLAS_OPENAI_EMBEDDING_MODEL": "rss-embedding-model",
+		}[name]
+	}}
 	dependencies.RSSWait = func(context.Context, time.Duration) error { return nil }
 	if err := Run(t.Context(), []string{"migrate"}, dependencies); err != nil {
 		t.Fatalf("Run(migrate) error = %v", err)

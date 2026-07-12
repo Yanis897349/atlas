@@ -40,13 +40,37 @@ func (embedder *Embedder) Embed(
 ) (search.EmbeddingBatch, error) {
 	requestContext, cancel := context.WithTimeout(ctx, embedder.requestBudget)
 	defer cancel()
-
-	requestBody, err := newRequest(requestContext, embedder.model, inputs)
-	if err != nil {
-		return search.EmbeddingBatch{}, fmt.Errorf("encode OpenAI embeddings request: %w", err)
+	if err := requestContext.Err(); err != nil {
+		return search.EmbeddingBatch{}, err
 	}
+	if len(inputs) == 0 {
+		return search.EmbeddingBatch{}, errors.New("embedding input batch is required")
+	}
+
+	embeddings := make([]search.ProviderEmbedding, 0, len(inputs))
+	for offset, batchIndex := 0, 0; offset < len(inputs); batchIndex++ {
+		requestBody, count, err := nextRequest(requestContext, embedder.model, inputs[offset:])
+		if err != nil {
+			return search.EmbeddingBatch{}, fmt.Errorf("encode OpenAI embeddings request batch %d: %w", batchIndex, err)
+		}
+		batchInputs := inputs[offset : offset+count]
+		batch, err := embedder.sendBatch(requestContext, requestBody, batchInputs)
+		if err != nil {
+			return search.EmbeddingBatch{}, fmt.Errorf("process OpenAI embeddings request batch %d: %w", batchIndex, err)
+		}
+		embeddings = append(embeddings, batch.Embeddings...)
+		offset += count
+	}
+	return search.EmbeddingBatch{Provider: "openai", Model: embedder.model, Embeddings: embeddings}, nil
+}
+
+func (embedder *Embedder) sendBatch(
+	ctx context.Context,
+	requestBody []byte,
+	inputs []search.EmbeddingInput,
+) (search.EmbeddingBatch, error) {
 	request, err := http.NewRequestWithContext(
-		requestContext,
+		ctx,
 		http.MethodPost,
 		embedder.endpoint,
 		bytes.NewReader(requestBody),
