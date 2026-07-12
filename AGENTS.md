@@ -29,6 +29,24 @@ mise exec -- make ci
 
 `make check` verifies formatting, runs golangci-lint, checks module tidiness, and runs the tests. `make ci` also runs the race detector. Do not claim a check passed unless it was run successfully. If a required check cannot run, report the exact blocker.
 
+PostgreSQL-backed tests require `ATLAS_TEST_DATABASE_URL`. The test helper skips them when this variable is absent, so a successful `go test`, `make check`, or `make ci` process is not proof that database integration tests ran. Before required verification:
+
+- Start the pinned PostgreSQL service and export the test environment, for example with `mise exec -- make db-up`, followed by `set -a; source .env; set +a`.
+- Remember that merely having an `.env` file is insufficient: Docker Compose reads it, but Go tests only see variables exported into their process environment.
+- Confirm `ATLAS_TEST_DATABASE_URL` is non-empty and the test database is reachable. If PostgreSQL, Docker, or the required environment is unavailable, report that exact blocker and do not claim database coverage.
+- Treat skipped integration tests as not run. Inspect verbose or JSON test output when necessary to distinguish skips from passes.
+- Keep database test expectations independent of the host timezone: normalize expected `timestamptz` values to UTC before structural comparison, compare instants when location identity is irrelevant, and explicitly assert UTC when it is part of the repository contract.
+- Respect PostgreSQL timestamp precision in boundary fixtures. Use at least one microsecond outside an inclusive or exclusive boundary instead of nanoseconds that PostgreSQL may round onto the boundary.
+
+Go may reuse cached test results even when an external database or extension has changed. Before handoff, run the complete suite without the test cache in addition to the standard targets:
+
+```sh
+mise exec -- go test -count=1 ./...
+mise exec -- go test -race -count=1 ./...
+```
+
+When database schema, migrations, PostgreSQL versions, or extensions such as pgvector are involved, prefer `mise exec -- make db-reset` before the uncached suite so verification uses the pinned disposable environment. Do not describe cached output as fresh execution, and do not claim local CI parity unless the required integration tests actually ran against that environment.
+
 When adding another language, generated artifact, or toolchain, extend `make fmt`, `make check`, and `make ci` so its formatter, linter or static analysis, dependency validation, and tests are enforced locally and in CI. Pin tool versions instead of relying on an ambient installation.
 
 ## Engineering expectations
