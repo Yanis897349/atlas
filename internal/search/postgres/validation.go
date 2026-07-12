@@ -83,6 +83,34 @@ func normalizeAndValidateEmbeddings(
 	return normalized, actor, nil
 }
 
+func normalizeAndValidateSimilarityQuery(
+	provider string,
+	model string,
+	queryVector []float32,
+	limit int,
+) (string, string, error) {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return "", "", errors.New("provider is required")
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", "", errors.New("model is required")
+	}
+	if len(queryVector) == 0 {
+		return "", "", errors.New("query vector is required")
+	}
+	for index, value := range queryVector {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			return "", "", fmt.Errorf("query vector value %d must be finite", index)
+		}
+	}
+	if limit < 1 || limit > search.MaxSimilarSourceRecordsLimit {
+		return "", "", fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
+	}
+	return provider, model, nil
+}
+
 func normalizeUUID(value string) (string, bool) {
 	var id pgtype.UUID
 	if err := id.Scan(value); err != nil || !id.Valid {

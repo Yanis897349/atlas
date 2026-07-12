@@ -1,0 +1,14 @@
+package search
+
+import "github.com/Yanis897349/atlas/internal/ingestion"
+
+// MaxSimilarSourceRecordsLimit bounds one similar-source-record retrieval.
+const MaxSimilarSourceRecordsLimit = 100
+
+// SimilarSourceRecord is one canonical source record ranked by embedding distance.
+type SimilarSourceRecord struct {
+	SourceRecord   ingestion.StoredSourceRecord
+	Provider       string
+	Model          string
+	CosineDistance float64
+}

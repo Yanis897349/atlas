@@ -93,3 +93,7 @@ type panicDB struct{}
 func (panicDB) Begin(context.Context) (pgx.Tx, error) {
 	panic("validation must happen before beginning a transaction")
 }
+
+func (panicDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	panic("validation must happen before querying PostgreSQL")
+}

@@ -11,9 +11,10 @@ import (
 // DB is the PostgreSQL operation used by Repository.
 type DB interface {
 	Begin(context.Context) (pgx.Tx, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
 }
 
-// Repository persists source-record embeddings.
+// Repository persists source-record embeddings and retrieves similar source records.
 type Repository struct {
 	db DB
 }

@@ -186,21 +186,25 @@ FOR EACH ROW EXECUTE FUNCTION delay_source_record_embedding()
 	assertEmbeddingCount(t, pool, 2)
 }
 
-func TestEmbeddingMigrationIsRepeatableAndCreatesRequiredSchema(t *testing.T) {
+func TestEmbeddingMigrationsAreRepeatableAndCreateRequiredSchema(t *testing.T) {
 	pool := openTestPool(t)
 	if err := databasepostgres.Migrate(t.Context(), pool); err != nil {
 		t.Fatalf("repeat Migrate() error = %v", err)
 	}
 
-	var extension, table string
+	var extension, table, provenanceIndex string
 	if err := pool.QueryRow(t.Context(), `SELECT extname FROM pg_extension WHERE extname = 'vector'`).Scan(&extension); err != nil {
 		t.Fatalf("load vector extension: %v", err)
 	}
 	if err := pool.QueryRow(t.Context(), `SELECT to_regclass('source_record_embeddings')::text`).Scan(&table); err != nil {
 		t.Fatalf("load embedding table: %v", err)
 	}
-	if extension != "vector" || table != "source_record_embeddings" {
-		t.Errorf("migration schema = (%q, %q)", extension, table)
+	if err := pool.QueryRow(t.Context(), `SELECT to_regclass('ix_source_record_embeddings_provider_model')::text`).Scan(&provenanceIndex); err != nil {
+		t.Fatalf("load embedding provenance index: %v", err)
+	}
+	if extension != "vector" || table != "source_record_embeddings" ||
+		provenanceIndex != "ix_source_record_embeddings_provider_model" {
+		t.Errorf("migration schema = (%q, %q, %q)", extension, table, provenanceIndex)
 	}
 }
 
