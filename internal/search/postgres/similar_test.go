@@ -9,6 +9,7 @@ import (
 
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
+	recordpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres/record"
 	"github.com/Yanis897349/atlas/internal/search"
 )
 
@@ -53,6 +54,7 @@ func TestRepositoryRetrievesSimilarSourceRecords(t *testing.T) {
 	}
 	recordByID := make(map[string]ingestion.StoredSourceRecord, len(records))
 	for _, record := range records {
+		recordpostgres.NormalizeTimes(&record)
 		recordByID[record.ID] = record
 	}
 	for index, result := range got {
@@ -61,6 +63,16 @@ func TestRepositoryRetrievesSimilarSourceRecords(t *testing.T) {
 		}
 		if !reflect.DeepEqual(result.SourceRecord, recordByID[result.SourceRecord.ID]) {
 			t.Errorf("SimilarSourceRecords()[%d].SourceRecord = %#v, want %#v", index, result.SourceRecord, recordByID[result.SourceRecord.ID])
+		}
+		for _, timestamp := range []time.Time{
+			result.SourceRecord.PublishedAt,
+			result.SourceRecord.RetrievedAt,
+			result.SourceRecord.CreatedAt,
+			result.SourceRecord.UpdatedAt,
+		} {
+			if timestamp.Location() != time.UTC {
+				t.Errorf("SimilarSourceRecords()[%d] timestamp location = %v, want UTC", index, timestamp.Location())
+			}
 		}
 		if result.Provider != "openai" || result.Model != "model-a" {
 			t.Errorf("SimilarSourceRecords()[%d] provenance = (%q, %q)", index, result.Provider, result.Model)
