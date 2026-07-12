@@ -52,6 +52,10 @@ func TestRepositoryUpcomingEventsFiltersOrdersAndLimits(t *testing.T) {
 		if got[index].Source == "" || got[index].SourceURL == "" {
 			t.Errorf("UpcomingEvents()[%d] source citation = (%q, %q), want both populated", index, got[index].Source, got[index].SourceURL)
 		}
+		if got[index].ScheduledAt.Location() != time.UTC || got[index].RetrievedAt.Location() != time.UTC ||
+			got[index].CreatedAt.Location() != time.UTC || got[index].UpdatedAt.Location() != time.UTC {
+			t.Errorf("UpcomingEvents()[%d] timestamps must use UTC", index)
+		}
 	}
 	all, err := repository.UpcomingEvents(t.Context(), calendar.RegionUnitedStates, windowStart, windowEnd, 10)
 	if err != nil {

@@ -61,12 +61,15 @@ func TestRepositoryWatchlistEventCandidatesFiltersOrdersAndLimits(t *testing.T) 
 			got[index].CreatedBy == "" || got[index].UpdatedBy == "" {
 			t.Errorf("WatchlistEventCandidates()[%d] = %#v, want complete canonical record", index, got[index])
 		}
-		if got[index].ScheduledAt.Location() != time.UTC || got[index].RetrievedAt.Location() != time.UTC {
+		if got[index].ScheduledAt.Location() != time.UTC || got[index].RetrievedAt.Location() != time.UTC ||
+			got[index].CreatedAt.Location() != time.UTC || got[index].UpdatedAt.Location() != time.UTC {
 			t.Errorf(
-				"WatchlistEventCandidates()[%d] time zones = (%v, %v), want UTC",
+				"WatchlistEventCandidates()[%d] time zones = (%v, %v, %v, %v), want UTC",
 				index,
 				got[index].ScheduledAt.Location(),
 				got[index].RetrievedAt.Location(),
+				got[index].CreatedAt.Location(),
+				got[index].UpdatedAt.Location(),
 			)
 		}
 	}

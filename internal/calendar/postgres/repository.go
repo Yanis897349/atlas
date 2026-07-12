@@ -48,7 +48,14 @@ func scanEvent(row pgx.Row) (calendar.StoredEvent, error) {
 		&event.CreatedBy,
 		&event.UpdatedBy,
 	)
-	return event, err
+	if err != nil {
+		return calendar.StoredEvent{}, err
+	}
+	event.ScheduledAt = event.ScheduledAt.UTC()
+	event.RetrievedAt = event.RetrievedAt.UTC()
+	event.CreatedAt = event.CreatedAt.UTC()
+	event.UpdatedAt = event.UpdatedAt.UTC()
+	return event, nil
 }
 
 const eventColumns = `
