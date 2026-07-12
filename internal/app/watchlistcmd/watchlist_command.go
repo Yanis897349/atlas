@@ -1,10 +1,11 @@
-package app
+package watchlistcmd
 
 import (
 	"context"
 	"fmt"
 	"io"
 
+	"github.com/Yanis897349/atlas/internal/app/commandoutput"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
 
@@ -28,7 +29,7 @@ func runCreateWatchlist(
 	if err != nil {
 		return fmt.Errorf("create watchlist: %w", err)
 	}
-	return encodeCommandJSON(stdout, "created watchlist", newWatchlistOutput(stored))
+	return commandoutput.EncodeJSON(stdout, "created watchlist", newWatchlistOutput(stored))
 }
 
 func runUpdateWatchlist(
@@ -41,7 +42,7 @@ func runUpdateWatchlist(
 	if err != nil {
 		return fmt.Errorf("update watchlist: %w", err)
 	}
-	return encodeCommandJSON(stdout, "updated watchlist", newWatchlistOutput(stored))
+	return commandoutput.EncodeJSON(stdout, "updated watchlist", newWatchlistOutput(stored))
 }
 
 func runWatchlists(
@@ -59,7 +60,7 @@ func runWatchlists(
 	for _, item := range stored {
 		output = append(output, newWatchlistOutput(item))
 	}
-	return encodeCommandJSON(stdout, "watchlists", output)
+	return commandoutput.EncodeJSON(stdout, "watchlists", output)
 }
 
 func runWatchlist(
@@ -72,7 +73,7 @@ func runWatchlist(
 	if err != nil {
 		return fmt.Errorf("retrieve watchlist: %w", err)
 	}
-	return encodeCommandJSON(stdout, "watchlist", newWatchlistOutput(stored))
+	return commandoutput.EncodeJSON(stdout, "watchlist", newWatchlistOutput(stored))
 }
 
 func newWatchlistOutput(stored watchlist.StoredWatchlist) watchlistOutput {
@@ -80,8 +81,8 @@ func newWatchlistOutput(stored watchlist.StoredWatchlist) watchlistOutput {
 		ID:        stored.ID,
 		Name:      stored.Name,
 		Symbols:   append([]string(nil), stored.Symbols...),
-		CreatedAt: formatOutputTime(stored.CreatedAt),
-		UpdatedAt: formatOutputTime(stored.UpdatedAt),
+		CreatedAt: commandoutput.FormatTime(stored.CreatedAt),
+		UpdatedAt: commandoutput.FormatTime(stored.UpdatedAt),
 		CreatedBy: stored.CreatedBy,
 		UpdatedBy: stored.UpdatedBy,
 	}

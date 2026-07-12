@@ -32,6 +32,16 @@ func TestRunValidatesCommandBeforeConfiguration(t *testing.T) {
 	}
 }
 
+func TestRunValidatesWatchlistCommandBeforeConfiguration(t *testing.T) {
+	err := Run(t.Context(), []string{"create-watchlist"}, Dependencies{Getenv: func(string) string {
+		t.Fatal("configuration read for invalid watchlist command")
+		return ""
+	}})
+	if err == nil {
+		t.Fatal("Run(create-watchlist) error = nil, want argument error")
+	}
+}
+
 func TestRunRecognizesCommandsBeforeRequiringApplicationDatabaseURL(t *testing.T) {
 	for _, command := range []string{"migrate", "ingest-rss", "ingest-bls", "ingest-fed", "ingest-ecb", "ingest-bea", "ingest-census", "ingest-eurostat", "ingest-spglobal"} {
 		t.Run(command, func(t *testing.T) {

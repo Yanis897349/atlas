@@ -1,21 +1,16 @@
 package app
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
 	"time"
+
+	"github.com/Yanis897349/atlas/internal/app/commandoutput"
 )
 
 func encodeCommandJSON(stdout io.Writer, subject string, value any) error {
-	encoder := json.NewEncoder(stdout)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(value); err != nil {
-		return fmt.Errorf("encode %s: %w", subject, err)
-	}
-	return nil
+	return commandoutput.EncodeJSON(stdout, subject, value)
 }
 
 func formatOutputTime(value time.Time) string {
-	return value.UTC().Format(time.RFC3339Nano)
+	return commandoutput.FormatTime(value)
 }

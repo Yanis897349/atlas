@@ -1,10 +1,11 @@
-package app
+package watchlistcmd
 
 import (
 	"context"
 	"fmt"
 	"io"
 
+	"github.com/Yanis897349/atlas/internal/app/commandoutput"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
 
@@ -35,5 +36,5 @@ func runLinkWatchlistEvents(
 	for _, link := range links {
 		output = append(output, newWatchlistEventOutput(link))
 	}
-	return encodeCommandJSON(stdout, "linked watchlist event candidates", output)
+	return commandoutput.EncodeJSON(stdout, "linked watchlist event candidates", output)
 }

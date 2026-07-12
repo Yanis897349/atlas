@@ -1,4 +1,4 @@
-package app
+package watchlistcmd
 
 import (
 	"bytes"
@@ -34,7 +34,7 @@ func TestParseCreateWatchlistCommandNormalizesOrderedInput(t *testing.T) {
 	}
 }
 
-func TestRunRejectsInvalidWatchlistArgumentsBeforeDatabaseSetup(t *testing.T) {
+func TestParseRejectsInvalidWatchlistArguments(t *testing.T) {
 	validCreate := validCreateWatchlistArguments()
 	tests := []struct {
 		name      string
@@ -64,12 +64,12 @@ func TestRunRejectsInvalidWatchlistArgumentsBeforeDatabaseSetup(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := Run(t.Context(), test.arguments, Dependencies{Getenv: func(string) string {
-				t.Fatal("configuration read for invalid command arguments")
-				return ""
-			}})
+			_, recognized, err := Parse(test.arguments)
+			if !recognized {
+				t.Fatal("Parse() did not recognize watchlist command")
+			}
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
-				t.Fatalf("Run() error = %v, want error containing %q", err, test.contains)
+				t.Fatalf("Parse() error = %v, want error containing %q", err, test.contains)
 			}
 		})
 	}

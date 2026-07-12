@@ -1,4 +1,5 @@
-package app
+// Package watchlistcmd parses and executes Atlas watchlist commands.
+package watchlistcmd
 
 import (
 	"context"
@@ -7,7 +8,8 @@ import (
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
 
-type watchlistCommand struct {
+// Command is one validated watchlist command.
+type Command struct {
 	name        string
 	create      createWatchlistCommand
 	update      updateWatchlistCommand
@@ -20,9 +22,13 @@ type watchlistCommand struct {
 	listEvents  watchlistEventsQuery
 }
 
-func parseWatchlistCommand(arguments []string) (watchlistCommand, bool, error) {
+// Parse recognizes and validates one watchlist command.
+func Parse(arguments []string) (Command, bool, error) {
+	if len(arguments) == 0 {
+		return Command{}, false, nil
+	}
 	name := arguments[0]
-	command := watchlistCommand{name: name}
+	command := Command{name: name}
 	var err error
 
 	switch name {
@@ -45,20 +51,26 @@ func parseWatchlistCommand(arguments []string) (watchlistCommand, bool, error) {
 	case "watchlist-events":
 		command.listEvents, err = parseWatchlistEventsQuery(arguments[1:])
 	default:
-		return watchlistCommand{}, false, nil
+		return Command{}, false, nil
 	}
 	if err != nil {
-		return watchlistCommand{}, true, err
+		return Command{}, true, err
 	}
 	return command, true, nil
 }
 
-func runWatchlistCommand(
+// RequiresEventCandidates reports whether command needs the calendar candidate reader.
+func (command Command) RequiresEventCandidates() bool {
+	return command.name == "link-watchlist-events"
+}
+
+// Run executes one validated watchlist command.
+func Run(
 	ctx context.Context,
-	repository watchlistCommandRepository,
+	repository Repository,
 	candidates watchlist.EventCandidateReader,
 	stdout io.Writer,
-	command watchlistCommand,
+	command Command,
 ) error {
 	switch command.name {
 	case "create-watchlist":
@@ -116,7 +128,8 @@ type watchlistEventLinkReader interface {
 	EventLinks(context.Context, string, string, int) ([]watchlist.StoredEventLink, error)
 }
 
-type watchlistCommandRepository interface {
+// Repository contains the persistence operations used by watchlist commands.
+type Repository interface {
 	watchlistCreator
 	watchlistUpdater
 	watchlistDeleter

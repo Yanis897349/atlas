@@ -1,10 +1,11 @@
-package app
+package watchlistcmd
 
 import (
 	"context"
 	"fmt"
 	"io"
 
+	"github.com/Yanis897349/atlas/internal/app/commandoutput"
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 )
@@ -48,7 +49,7 @@ func runLinkWatchlistEvent(
 	if err != nil {
 		return fmt.Errorf("link watchlist event: %w", err)
 	}
-	return encodeCommandJSON(stdout, "linked watchlist event", newWatchlistEventOutput(stored))
+	return commandoutput.EncodeJSON(stdout, "linked watchlist event", newWatchlistEventOutput(stored))
 }
 
 func runWatchlistEvents(
@@ -65,15 +66,15 @@ func runWatchlistEvents(
 	for _, link := range stored {
 		output = append(output, newWatchlistEventOutput(link))
 	}
-	return encodeCommandJSON(stdout, "watchlist events", output)
+	return commandoutput.EncodeJSON(stdout, "watchlist events", output)
 }
 
 func newWatchlistEventOutput(link watchlist.StoredEventLink) watchlistEventOutput {
 	return watchlistEventOutput{
 		ID: link.ID, WatchlistID: link.WatchlistID, Symbol: link.Symbol,
 		Event:     newStoredEconomicEventOutput(link.Event),
-		CreatedAt: formatOutputTime(link.CreatedAt),
-		UpdatedAt: formatOutputTime(link.UpdatedAt),
+		CreatedAt: commandoutput.FormatTime(link.CreatedAt),
+		UpdatedAt: commandoutput.FormatTime(link.UpdatedAt),
 		CreatedBy: link.CreatedBy, UpdatedBy: link.UpdatedBy,
 	}
 }
@@ -82,9 +83,9 @@ func newStoredEconomicEventOutput(event calendar.StoredEvent) storedEconomicEven
 	return storedEconomicEventOutput{
 		ID: event.ID, Source: event.Source, ExternalEventID: event.ExternalEventID,
 		Name: event.Name, Region: event.Region, EventType: event.Type,
-		ScheduledAt: formatOutputTime(event.ScheduledAt), SourceURL: event.SourceURL,
-		RetrievedAt: formatOutputTime(event.RetrievedAt),
-		CreatedAt:   formatOutputTime(event.CreatedAt), UpdatedAt: formatOutputTime(event.UpdatedAt),
+		ScheduledAt: commandoutput.FormatTime(event.ScheduledAt), SourceURL: event.SourceURL,
+		RetrievedAt: commandoutput.FormatTime(event.RetrievedAt),
+		CreatedAt:   commandoutput.FormatTime(event.CreatedAt), UpdatedAt: commandoutput.FormatTime(event.UpdatedAt),
 		CreatedBy: event.CreatedBy, UpdatedBy: event.UpdatedBy,
 	}
 }

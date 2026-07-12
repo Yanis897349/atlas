@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Yanis897349/atlas/internal/app/watchlistcmd"
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
@@ -20,7 +21,7 @@ type command struct {
 	upcomingEventsQuery      upcomingEventsQuery
 	dailyBriefInputQuery     dailybrief.InputQuery
 	storedDailyBriefsQuery   storedDailyBriefsQuery
-	watchlistCommand         *watchlistCommand
+	watchlistCommand         *watchlistcmd.Command
 }
 
 func parseCommand(arguments []string) (command, error) {
@@ -60,7 +61,7 @@ func parseCommand(arguments []string) (command, error) {
 		return command{name: arguments[0], storedDailyBriefsQuery: query}, nil
 	}
 
-	watchlistCommand, recognized, err := parseWatchlistCommand(arguments)
+	watchlistCommand, recognized, err := watchlistcmd.Parse(arguments)
 	if err != nil {
 		return command{}, err
 	}

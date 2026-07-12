@@ -1,4 +1,4 @@
-package app
+package watchlistcmd
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func TestParseDeleteWatchlistCommand(t *testing.T) {
 	}
 }
 
-func TestRunRejectsInvalidDeleteWatchlistArgumentsBeforeDatabaseSetup(t *testing.T) {
+func TestParseRejectsInvalidDeleteWatchlistArguments(t *testing.T) {
 	valid := []string{"delete-watchlist", "--id", "00000000-0000-0000-0000-000000000001"}
 	tests := []struct {
 		name      string
@@ -35,12 +35,12 @@ func TestRunRejectsInvalidDeleteWatchlistArgumentsBeforeDatabaseSetup(t *testing
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := Run(t.Context(), test.arguments, Dependencies{Getenv: func(string) string {
-				t.Fatal("configuration read for invalid command arguments")
-				return ""
-			}})
+			_, recognized, err := Parse(test.arguments)
+			if !recognized {
+				t.Fatal("Parse() did not recognize watchlist command")
+			}
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
-				t.Fatalf("Run() error = %v, want error containing %q", err, test.contains)
+				t.Fatalf("Parse() error = %v, want error containing %q", err, test.contains)
 			}
 		})
 	}
