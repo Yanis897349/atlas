@@ -7,6 +7,9 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar"
 )
 
+// MaxStoredBriefsLimit bounds one stored-daily-brief retrieval.
+const MaxStoredBriefsLimit = 100
+
 // CitationKind identifies the source entity cited by a section.
 type CitationKind string
 

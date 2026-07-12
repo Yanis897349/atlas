@@ -16,6 +16,7 @@ import (
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
+	"github.com/Yanis897349/atlas/internal/watchlist"
 	watchlistpostgres "github.com/Yanis897349/atlas/internal/watchlist/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -101,21 +102,15 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		if err != nil {
 			return fmt.Errorf("configure watchlist repository: %w", err)
 		}
+		var candidates watchlist.EventCandidateReader
 		if parsedCommand.name == "link-watchlist-events" {
 			eventRepository, err := calendarpostgres.NewRepository(pool)
 			if err != nil {
 				return fmt.Errorf("configure economic event repository: %w", err)
 			}
-			return runLinkWatchlistEvents(
-				ctx,
-				eventRepository,
-				repository,
-				repository,
-				stdout,
-				parsedCommand.watchlistCommand.linkEvents,
-			)
+			candidates = eventRepository
 		}
-		return runWatchlistCommand(ctx, repository, stdout, *parsedCommand.watchlistCommand)
+		return runWatchlistCommand(ctx, repository, candidates, stdout, *parsedCommand.watchlistCommand)
 	}
 	switch parsedCommand.name {
 	case "migrate":

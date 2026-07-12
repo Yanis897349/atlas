@@ -10,7 +10,6 @@ import (
 
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/dailybrief"
-	dailybriefpostgres "github.com/Yanis897349/atlas/internal/dailybrief/postgres"
 )
 
 const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|link-watchlist-events|unlink-watchlist-event|watchlist-events>"
@@ -80,7 +79,7 @@ func parseCommand(arguments []string) (command, error) {
 }
 
 func parseStoredDailyBriefsQuery(arguments []string) (storedDailyBriefsQuery, error) {
-	return parseRegionWindowQuery("daily-briefs", dailybriefpostgres.MaxStoredBriefsLimit, arguments)
+	return parseRegionWindowQuery("daily-briefs", dailybrief.MaxStoredBriefsLimit, arguments)
 }
 
 func parseUpcomingEventsQuery(arguments []string) (upcomingEventsQuery, error) {

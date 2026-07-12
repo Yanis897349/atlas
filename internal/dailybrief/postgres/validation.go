@@ -90,8 +90,8 @@ func validateStoredDailyBriefsQuery(region calendar.Region, windowStart, windowE
 	if windowEnd.Before(windowStart) {
 		return errors.New("window end must not be before window start")
 	}
-	if limit < 1 || limit > MaxStoredBriefsLimit {
-		return fmt.Errorf("limit must be between 1 and %d", MaxStoredBriefsLimit)
+	if limit < 1 || limit > dailybrief.MaxStoredBriefsLimit {
+		return fmt.Errorf("limit must be between 1 and %d", dailybrief.MaxStoredBriefsLimit)
 	}
 	return nil
 }

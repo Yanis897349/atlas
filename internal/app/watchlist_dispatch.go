@@ -56,6 +56,7 @@ func parseWatchlistCommand(arguments []string) (watchlistCommand, bool, error) {
 func runWatchlistCommand(
 	ctx context.Context,
 	repository watchlistCommandRepository,
+	candidates watchlist.EventCandidateReader,
 	stdout io.Writer,
 	command watchlistCommand,
 ) error {
@@ -73,7 +74,7 @@ func runWatchlistCommand(
 	case "link-watchlist-event":
 		return runLinkWatchlistEvent(ctx, repository, stdout, command.linkEvent)
 	case "link-watchlist-events":
-		panic("cross-repository watchlist command must be handled before dispatch")
+		return runLinkWatchlistEvents(ctx, candidates, repository, repository, stdout, command.linkEvents)
 	case "unlink-watchlist-event":
 		return runUnlinkWatchlistEvent(ctx, repository, command.unlinkEvent)
 	case "watchlist-events":
@@ -124,4 +125,5 @@ type watchlistCommandRepository interface {
 	watchlistEventLinkCreator
 	watchlistEventLinkDeleter
 	watchlistEventLinkReader
+	watchlist.EventLinkWriter
 }

@@ -176,7 +176,7 @@ func TestRepositoryValidatesBeforePostgreSQL(t *testing.T) {
 		{region: "asia", from: time.Now(), to: time.Now(), limit: 1},
 		{region: calendar.RegionUnitedStates, to: time.Now(), limit: 1},
 		{region: calendar.RegionUnitedStates, from: time.Now(), limit: 0},
-		{region: calendar.RegionUnitedStates, from: time.Now(), to: time.Now(), limit: MaxStoredBriefsLimit + 1},
+		{region: calendar.RegionUnitedStates, from: time.Now(), to: time.Now(), limit: dailybrief.MaxStoredBriefsLimit + 1},
 	}
 	for _, test := range queryTests {
 		if _, err := repository.StoredDailyBriefs(t.Context(), test.region, test.from, test.to, test.limit); err == nil {

@@ -10,9 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// MaxStoredBriefsLimit bounds one stored-daily-brief retrieval.
-const MaxStoredBriefsLimit = 100
-
 // DB is the PostgreSQL operation used by Repository.
 type DB interface {
 	Begin(context.Context) (pgx.Tx, error)
