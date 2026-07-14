@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Yanis897349/atlas/internal/search"
 	"github.com/jackc/pgx/v5"
@@ -22,7 +23,7 @@ func TestRepositoryValidatesSimilarityQueryBeforePostgreSQL(t *testing.T) {
 		provider    string
 		model       string
 		queryVector []float32
-		source      *string
+		filters     search.SimilarSourceRecordFilters
 		limit       int
 		contains    string
 	}{
@@ -31,7 +32,12 @@ func TestRepositoryValidatesSimilarityQueryBeforePostgreSQL(t *testing.T) {
 		{name: "vector", provider: "provider", model: "model", limit: 1, contains: "query vector is required"},
 		{name: "zero norm", provider: "provider", model: "model", queryVector: []float32{0, 0}, limit: 1, contains: "query vector must have finite non-zero cosine norm"},
 		{name: "NaN", provider: "provider", model: "model", queryVector: []float32{float32(math.NaN())}, limit: 1, contains: "value 0 must be finite"},
-		{name: "blank source", provider: "provider", model: "model", queryVector: []float32{1}, source: similaritySource(" \t"), limit: 1, contains: "source is required when supplied"},
+		{name: "blank source", provider: "provider", model: "model", queryVector: []float32{1}, filters: search.SimilarSourceRecordFilters{Source: similaritySource(" \t")}, limit: 1, contains: "source is required when supplied"},
+		{name: "missing window end", provider: "provider", model: "model", queryVector: []float32{1}, filters: search.SimilarSourceRecordFilters{PublicationWindowStart: similarityTime(time.Now())}, limit: 1, contains: "start and end must be supplied together"},
+		{name: "missing window start", provider: "provider", model: "model", queryVector: []float32{1}, filters: search.SimilarSourceRecordFilters{PublicationWindowEnd: similarityTime(time.Now())}, limit: 1, contains: "start and end must be supplied together"},
+		{name: "zero window start", provider: "provider", model: "model", queryVector: []float32{1}, filters: similarityWindow(time.Time{}, time.Now()), limit: 1, contains: "start is required"},
+		{name: "zero window end", provider: "provider", model: "model", queryVector: []float32{1}, filters: similarityWindow(time.Now(), time.Time{}), limit: 1, contains: "end is required"},
+		{name: "reversed window", provider: "provider", model: "model", queryVector: []float32{1}, filters: similarityWindow(time.Now(), time.Now().Add(-time.Hour)), limit: 1, contains: "end must not be before start"},
 		{name: "zero limit", provider: "provider", model: "model", queryVector: []float32{1}, contains: "limit must be between"},
 		{name: "negative limit", provider: "provider", model: "model", queryVector: []float32{1}, limit: -1, contains: "limit must be between"},
 		{name: "high limit", provider: "provider", model: "model", queryVector: []float32{1}, limit: search.MaxSimilarSourceRecordsLimit + 1, contains: "limit must be between"},
@@ -40,7 +46,7 @@ func TestRepositoryValidatesSimilarityQueryBeforePostgreSQL(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := repository.SimilarSourceRecords(
-				t.Context(), test.provider, test.model, test.queryVector, test.source, test.limit,
+				t.Context(), test.provider, test.model, test.queryVector, test.filters, test.limit,
 			)
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
 				t.Fatalf("SimilarSourceRecords() error = %v, want containing %q", err, test.contains)
@@ -73,7 +79,9 @@ func TestRepositoryPreservesSimilarityQueryFailures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewRepository() error = %v", err)
 			}
-			got, err := repository.SimilarSourceRecords(t.Context(), " provider ", " model ", []float32{1}, nil, 1)
+			got, err := repository.SimilarSourceRecords(
+				t.Context(), " provider ", " model ", []float32{1}, search.SimilarSourceRecordFilters{}, 1,
+			)
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
 				t.Fatalf("SimilarSourceRecords() error = %v, want contextual %q", err, test.contains)
 			}
@@ -89,6 +97,17 @@ func TestRepositoryPreservesSimilarityQueryFailures(t *testing.T) {
 
 func similaritySource(value string) *string {
 	return &value
+}
+
+func similarityTime(value time.Time) *time.Time {
+	return &value
+}
+
+func similarityWindow(windowStart, windowEnd time.Time) search.SimilarSourceRecordFilters {
+	return search.SimilarSourceRecordFilters{
+		PublicationWindowStart: similarityTime(windowStart),
+		PublicationWindowEnd:   similarityTime(windowEnd),
+	}
 }
 
 type failureDB struct {

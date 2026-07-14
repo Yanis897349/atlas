@@ -165,12 +165,57 @@ func TestRunSearchesSourceRecordsEndToEnd(t *testing.T) {
 	}
 
 	stdout.Reset()
+	windowArguments := append(append([]string(nil), arguments...),
+		"--from", records[1].PublishedAt.Format(time.RFC3339Nano),
+		"--to", records[3].PublishedAt.Format(time.RFC3339Nano),
+	)
+	if err := Run(t.Context(), windowArguments, dependencies); err != nil {
+		t.Fatalf("Run(search-source-records windowed) error = %v", err)
+	}
+	output = nil
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode windowed command output: %v", err)
+	}
+	windowExactRecords := []ingestion.StoredSourceRecord{records[2], records[3]}
+	sort.Slice(windowExactRecords, func(left, right int) bool {
+		return windowExactRecords[left].ID < windowExactRecords[right].ID
+	})
+	wantWindowIDs := []string{windowExactRecords[0].ID, windowExactRecords[1].ID, records[1].ID}
+	if len(output) != len(wantWindowIDs) {
+		t.Fatalf("windowed output = %#v, want three inclusive-window matches", output)
+	}
+	for index, wantID := range wantWindowIDs {
+		if output[index].ID != wantID {
+			t.Errorf("windowed output[%d] = %#v, want match %q", index, output[index], wantID)
+		}
+	}
+
+	stdout.Reset()
+	combinedArguments := append(append([]string(nil), windowArguments...), "--source", "  test-publisher  ")
+	if err := Run(t.Context(), combinedArguments, dependencies); err != nil {
+		t.Fatalf("Run(search-source-records combined filters) error = %v", err)
+	}
+	output = nil
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode combined-filter command output: %v", err)
+	}
+	wantCombinedIDs := []string{records[2].ID, records[1].ID}
+	if len(output) != len(wantCombinedIDs) {
+		t.Fatalf("combined-filter output = %#v, want two source and window matches", output)
+	}
+	for index, wantID := range wantCombinedIDs {
+		if output[index].ID != wantID || output[index].Source != "test-publisher" {
+			t.Errorf("combined-filter output[%d] = %#v, want test-publisher match %q", index, output[index], wantID)
+		}
+	}
+
+	stdout.Reset()
 	env["ATLAS_OPENAI_EMBEDDING_MODEL"] = "unindexed-model"
-	if err := Run(t.Context(), filteredArguments, dependencies); err != nil {
+	if err := Run(t.Context(), combinedArguments, dependencies); err != nil {
 		t.Fatalf("Run(search-source-records empty) error = %v", err)
 	}
-	if stdout.String() != "[]\n" || providerCalls.Load() != 3 {
-		t.Errorf("empty search = %q with %d provider calls, want [] after third query embedding", stdout.String(), providerCalls.Load())
+	if stdout.String() != "[]\n" || providerCalls.Load() != 5 {
+		t.Errorf("empty search = %q with %d provider calls, want [] after fifth query embedding", stdout.String(), providerCalls.Load())
 	}
 }
 

@@ -81,31 +81,28 @@ func normalizeAndValidateSimilarityQuery(
 	provider string,
 	model string,
 	queryVector []float32,
-	source *string,
+	filters search.SimilarSourceRecordFilters,
 	limit int,
-) (string, string, *string, error) {
+) (string, string, search.SimilarSourceRecordFilters, error) {
 	provider = strings.TrimSpace(provider)
 	if provider == "" {
-		return "", "", nil, errors.New("provider is required")
+		return "", "", search.SimilarSourceRecordFilters{}, errors.New("provider is required")
 	}
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return "", "", nil, errors.New("model is required")
+		return "", "", search.SimilarSourceRecordFilters{}, errors.New("model is required")
 	}
 	if err := vector.Validate(queryVector); err != nil {
-		return "", "", nil, fmt.Errorf("query %w", err)
+		return "", "", search.SimilarSourceRecordFilters{}, fmt.Errorf("query %w", err)
 	}
-	if source != nil {
-		normalizedSource := strings.TrimSpace(*source)
-		if normalizedSource == "" {
-			return "", "", nil, errors.New("source is required when supplied")
-		}
-		source = &normalizedSource
+	filters, err := search.NormalizeAndValidateSimilarSourceRecordFilters(filters)
+	if err != nil {
+		return "", "", search.SimilarSourceRecordFilters{}, err
 	}
 	if limit < 1 || limit > search.MaxSimilarSourceRecordsLimit {
-		return "", "", nil, fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
+		return "", "", search.SimilarSourceRecordFilters{}, fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
 	}
-	return provider, model, source, nil
+	return provider, model, filters, nil
 }
 
 func normalizeUUID(value string) (string, bool) {

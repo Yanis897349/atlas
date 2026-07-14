@@ -18,24 +18,39 @@ import (
 
 func TestParseSearchSourceRecordsCommandPreservesExactQuery(t *testing.T) {
 	command, recognized, err := Parse([]string{
-		"search-source-records", "--limit", "24", "--query", "  central bank outlook  ", "--source", "  publisher  ",
+		"search-source-records", "--limit", "24", "--query", "  central bank outlook  ",
+		"--source", "  publisher  ", "--from", "2026-07-12T10:00:00+02:00", "--to", "2026-07-12T14:00:00+02:00",
 	})
 	if err != nil || !recognized {
 		t.Fatalf("Parse() = (%#v, %t, %v), want recognized command", command, recognized, err)
 	}
+	wantStart := time.Date(2026, time.July, 12, 8, 0, 0, 0, time.UTC)
+	wantEnd := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
 	if command.name != "search-source-records" || command.search.query != "  central bank outlook  " ||
-		command.search.source == nil || *command.search.source != "publisher" || command.search.limit != 24 {
-		t.Errorf("command = %#v, want exact query, normalized source, and validated limit", command)
+		command.search.filters.Source == nil || *command.search.filters.Source != "publisher" ||
+		command.search.filters.PublicationWindowStart == nil ||
+		*command.search.filters.PublicationWindowStart != wantStart ||
+		command.search.filters.PublicationWindowEnd == nil ||
+		*command.search.filters.PublicationWindowEnd != wantEnd || command.search.limit != 24 {
+		t.Errorf("command = %#v, want exact query, normalized filters, and validated limit", command)
 	}
 }
 
-func TestParseSearchSourceRecordsCommandOmitsSourceFilter(t *testing.T) {
+func TestParseSearchSourceRecordsCommandOmitsFilters(t *testing.T) {
 	command, recognized, err := Parse(validSearchSourceRecordsArguments())
 	if err != nil || !recognized {
 		t.Fatalf("Parse() = (%#v, %t, %v), want recognized command", command, recognized, err)
 	}
-	if command.search.source != nil {
-		t.Errorf("source = %q, want omitted filter", *command.search.source)
+	if !reflect.DeepEqual(command.search.filters, search.SimilarSourceRecordFilters{}) {
+		t.Errorf("filters = %#v, want omitted filters", command.search.filters)
+	}
+}
+
+func TestParseSearchSourceRecordsCommandAcceptsEqualInclusiveWindow(t *testing.T) {
+	arguments := append(validSearchSourceRecordsArguments(),
+		"--from", "2026-07-12T08:00:00Z", "--to", "2026-07-12T08:00:00Z")
+	if _, _, err := Parse(arguments); err != nil {
+		t.Fatalf("Parse() error = %v", err)
 	}
 }
 
@@ -50,11 +65,20 @@ func TestParseRejectsInvalidSearchSourceRecordsArguments(t *testing.T) {
 		{name: "missing limit", arguments: withoutFlag(valid, "--limit"), contains: "--limit is required"},
 		{name: "blank query", arguments: replaceFlag(valid, "--query", " \t "), contains: "--query must not be blank"},
 		{name: "blank source", arguments: append(valid, "--source", " \t "), contains: "--source must not be blank"},
+		{name: "missing to", arguments: append(valid, "--from", "2026-07-12T08:00:00Z"), contains: "--from and --to must be supplied together"},
+		{name: "missing from", arguments: append(valid, "--to", "2026-07-12T12:00:00Z"), contains: "--from and --to must be supplied together"},
+		{name: "malformed from", arguments: append(valid, "--from", "today", "--to", "2026-07-12T12:00:00Z"), contains: "--from must be RFC3339"},
+		{name: "malformed to", arguments: append(valid, "--from", "2026-07-12T08:00:00Z", "--to", "later"), contains: "--to must be RFC3339"},
+		{name: "zero from", arguments: append(valid, "--from", "0001-01-01T00:00:00Z", "--to", "2026-07-12T12:00:00Z"), contains: "--from must not be zero"},
+		{name: "zero to", arguments: append(valid, "--from", "2026-07-12T08:00:00Z", "--to", "0001-01-01T00:00:00Z"), contains: "--to must not be zero"},
+		{name: "reversed window", arguments: append(valid, "--from", "2026-07-12T08:00:00Z", "--to", "2026-07-12T07:59:59Z"), contains: "--to must not be before --from"},
 		{name: "nonnumeric limit", arguments: replaceFlag(valid, "--limit", "many"), contains: "--limit must be between 1 and 100"},
 		{name: "zero limit", arguments: replaceFlag(valid, "--limit", "0"), contains: "--limit must be between 1 and 100"},
 		{name: "high limit", arguments: replaceFlag(valid, "--limit", "101"), contains: "--limit must be between 1 and 100"},
 		{name: "repeated flag", arguments: append(valid, "--query", "second"), contains: "must only be provided once"},
 		{name: "repeated source", arguments: append(valid, "--source", "publisher", "--source", "second"), contains: "must only be provided once"},
+		{name: "repeated from", arguments: append(valid, "--from", "2026-07-12T08:00:00Z", "--from", "2026-07-12T09:00:00Z"), contains: "must only be provided once"},
+		{name: "repeated to", arguments: append(valid, "--to", "2026-07-12T08:00:00Z", "--to", "2026-07-12T09:00:00Z"), contains: "must only be provided once"},
 		{name: "unknown flag", arguments: append(valid, "--format", "yaml"), contains: "flag provided but not defined"},
 		{name: "positional argument", arguments: append(valid, "extra"), contains: "unexpected positional arguments"},
 	}
@@ -85,7 +109,17 @@ func TestRunSearchSourceRecordsWritesCompleteOrderedRecords(t *testing.T) {
 	}}
 	stdout := &bytes.Buffer{}
 	source := "publisher"
-	command := searchSourceRecordsCommand{query: "  exact query  ", source: &source, limit: 2}
+	windowStart := firstTime.Add(-time.Hour)
+	windowEnd := firstTime.Add(2 * time.Hour)
+	command := searchSourceRecordsCommand{
+		query: "  exact query  ",
+		filters: search.SimilarSourceRecordFilters{
+			Source:                 &source,
+			PublicationWindowStart: &windowStart,
+			PublicationWindowEnd:   &windowEnd,
+		},
+		limit: 2,
+	}
 
 	if err := runSearchSourceRecords(t.Context(), embedder, reader, stdout, command); err != nil {
 		t.Fatalf("runSearchSourceRecords() error = %v", err)
@@ -93,7 +127,11 @@ func TestRunSearchSourceRecordsWritesCompleteOrderedRecords(t *testing.T) {
 	if !reflect.DeepEqual(embedder.inputs, []search.EmbeddingInput{{
 		SourceRecordID: "semantic-search-query", Text: "  exact query  ",
 	}}) || reader.provider != "openai" || reader.model != "embedding-model" || reader.limit != 2 ||
-		reader.source == nil || *reader.source != "publisher" || !reflect.DeepEqual(reader.vector, []float32{1, 2}) {
+		reader.filters.Source == nil || *reader.filters.Source != "publisher" ||
+		reader.filters.PublicationWindowStart == nil ||
+		*reader.filters.PublicationWindowStart != windowStart.UTC() ||
+		reader.filters.PublicationWindowEnd == nil ||
+		*reader.filters.PublicationWindowEnd != windowEnd.UTC() || !reflect.DeepEqual(reader.vector, []float32{1, 2}) {
 		t.Errorf("orchestration = embedder %#v reader %#v, want exact query and normalized provenance", embedder, reader)
 	}
 	var output []searchedSourceRecordOutput
@@ -189,7 +227,7 @@ type similarSourceRecordReaderStub struct {
 	provider string
 	model    string
 	vector   []float32
-	source   *string
+	filters  search.SimilarSourceRecordFilters
 	limit    int
 }
 
@@ -198,21 +236,34 @@ func (reader *similarSourceRecordReaderStub) SimilarSourceRecords(
 	provider string,
 	model string,
 	vector []float32,
-	source *string,
+	filters search.SimilarSourceRecordFilters,
 	limit int,
 ) ([]search.SimilarSourceRecord, error) {
 	reader.provider, reader.model, reader.vector, reader.limit = provider, model, append([]float32(nil), vector...), limit
-	if source != nil {
-		copiedSource := *source
-		reader.source = &copiedSource
-	}
+	reader.filters = copySearchFilters(filters)
 	return reader.results, reader.err
 }
 
 type panicSimilarSourceRecordReader struct{}
 
 func (panicSimilarSourceRecordReader) SimilarSourceRecords(
-	context.Context, string, string, []float32, *string, int,
+	context.Context, string, string, []float32, search.SimilarSourceRecordFilters, int,
 ) ([]search.SimilarSourceRecord, error) {
 	panic("similar source record reader must not be called")
+}
+
+func copySearchFilters(filters search.SimilarSourceRecordFilters) search.SimilarSourceRecordFilters {
+	if filters.Source != nil {
+		copiedSource := *filters.Source
+		filters.Source = &copiedSource
+	}
+	if filters.PublicationWindowStart != nil {
+		copiedStart := *filters.PublicationWindowStart
+		filters.PublicationWindowStart = &copiedStart
+	}
+	if filters.PublicationWindowEnd != nil {
+		copiedEnd := *filters.PublicationWindowEnd
+		filters.PublicationWindowEnd = &copiedEnd
+	}
+	return filters
 }

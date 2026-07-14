@@ -25,6 +25,27 @@ func TestRunRejectsInvalidSearchSourceRecordsArgumentsBeforeConfiguration(t *tes
 			},
 			contains: "--source must not be blank",
 		},
+		{
+			name: "one-sided publication window",
+			arguments: []string{
+				"search-source-records", "--query", "inflation", "--from", "2026-07-12T08:00:00Z", "--limit", "10",
+			},
+			contains: "--from and --to must be supplied together",
+		},
+		{
+			name: "malformed publication window",
+			arguments: []string{
+				"search-source-records", "--query", "inflation", "--from", "today", "--to", "2026-07-12T12:00:00Z", "--limit", "10",
+			},
+			contains: "--from must be RFC3339",
+		},
+		{
+			name: "reversed publication window",
+			arguments: []string{
+				"search-source-records", "--query", "inflation", "--from", "2026-07-12T12:00:00Z", "--to", "2026-07-12T08:00:00Z", "--limit", "10",
+			},
+			contains: "--to must not be before --from",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

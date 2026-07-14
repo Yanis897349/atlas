@@ -27,8 +27,16 @@ func TestSearchSourceRecordsEmbedsExactQueryAndPreservesRepositoryResults(t *tes
 	}
 	reader := &similarSourceRecordReaderStub{results: want}
 	source := "  publisher  "
+	paris := time.FixedZone("Paris", 2*60*60)
+	windowStart := time.Date(2026, time.July, 12, 10, 0, 0, 0, paris)
+	windowEnd := windowStart.Add(6 * time.Hour)
+	filters := SimilarSourceRecordFilters{
+		Source:                 &source,
+		PublicationWindowStart: &windowStart,
+		PublicationWindowEnd:   &windowEnd,
+	}
 
-	got, err := SearchSourceRecords(t.Context(), embedder, reader, query, &source, 17)
+	got, err := SearchSourceRecords(t.Context(), embedder, reader, query, filters, 17)
 	if err != nil {
 		t.Fatalf("SearchSourceRecords() error = %v", err)
 	}
@@ -37,20 +45,27 @@ func TestSearchSourceRecordsEmbedsExactQueryAndPreservesRepositoryResults(t *tes
 		t.Errorf("embedder call = (%d, %#v), want (1, %#v)", embedder.calls, embedder.inputs, wantInputs)
 	}
 	if reader.calls != 1 || reader.provider != "openai" || reader.model != "embedding-model" ||
-		reader.source == nil || *reader.source != "publisher" || reader.limit != 17 ||
+		reader.filters.Source == nil || *reader.filters.Source != "publisher" ||
+		reader.filters.PublicationWindowStart == nil ||
+		*reader.filters.PublicationWindowStart != windowStart.UTC() ||
+		reader.filters.PublicationWindowEnd == nil ||
+		*reader.filters.PublicationWindowEnd != windowEnd.UTC() || reader.limit != 17 ||
 		!reflect.DeepEqual(reader.queryVector, []float32{0.25, 0.5, 0.75}) {
 		t.Errorf(
-			"reader call = (%d, %q, %q, %#v, %#v, %d), want normalized source publisher",
+			"reader call = (%d, %q, %q, %#v, %#v, %d), want normalized filters",
 			reader.calls,
 			reader.provider,
 			reader.model,
 			reader.queryVector,
-			reader.source,
+			reader.filters,
 			reader.limit,
 		)
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("SearchSourceRecords() = %#v, want %#v", got, want)
+	}
+	if source != "  publisher  " || windowStart.Location() != paris || windowEnd.Location() != paris {
+		t.Errorf("caller filters mutated = (%q, %v, %v)", source, windowStart, windowEnd)
 	}
 
 	embedder.batch.Embeddings[0].Vector[0] = 99
@@ -63,12 +78,17 @@ func TestSearchSourceRecordsRejectsInvalidInputBeforeDependencies(t *testing.T) 
 	tests := []struct {
 		name     string
 		query    string
-		source   *string
+		filters  SimilarSourceRecordFilters
 		limit    int
 		contains string
 	}{
 		{name: "blank query", query: " \t\n", limit: 1, contains: "query is required"},
-		{name: "blank source", query: "inflation", source: semanticSource(" \t\n"), limit: 1, contains: "source is required when supplied"},
+		{name: "blank source", query: "inflation", filters: SimilarSourceRecordFilters{Source: semanticSource(" \t\n")}, limit: 1, contains: "source is required when supplied"},
+		{name: "missing window end", query: "inflation", filters: SimilarSourceRecordFilters{PublicationWindowStart: semanticTime(time.Now())}, limit: 1, contains: "start and end must be supplied together"},
+		{name: "missing window start", query: "inflation", filters: SimilarSourceRecordFilters{PublicationWindowEnd: semanticTime(time.Now())}, limit: 1, contains: "start and end must be supplied together"},
+		{name: "zero window start", query: "inflation", filters: semanticWindow(time.Time{}, time.Now()), limit: 1, contains: "start is required"},
+		{name: "zero window end", query: "inflation", filters: semanticWindow(time.Now(), time.Time{}), limit: 1, contains: "end is required"},
+		{name: "reversed window", query: "inflation", filters: semanticWindow(time.Now(), time.Now().Add(-time.Hour)), limit: 1, contains: "end must not be before start"},
 		{name: "zero limit", query: "inflation", limit: 0, contains: "limit must be between"},
 		{name: "negative limit", query: "inflation", limit: -1, contains: "limit must be between"},
 		{name: "high limit", query: "inflation", limit: MaxSimilarSourceRecordsLimit + 1, contains: "limit must be between"},
@@ -81,7 +101,7 @@ func TestSearchSourceRecordsRejectsInvalidInputBeforeDependencies(t *testing.T) 
 				panicEmbedder{},
 				panicSimilarSourceRecordReader{},
 				test.query,
-				test.source,
+				test.filters,
 				test.limit,
 			)
 			if err == nil || !strings.Contains(err.Error(), "validate semantic source record search") ||
@@ -146,7 +166,7 @@ func TestSearchSourceRecordsRejectsMalformedQueryEmbedding(t *testing.T) {
 				&embedderStub{batch: test.batch},
 				panicSimilarSourceRecordReader{},
 				"query",
-				nil,
+				SimilarSourceRecordFilters{},
 				1,
 			)
 			if err == nil || !strings.Contains(err.Error(), "validate semantic search query embedding") ||
@@ -181,7 +201,7 @@ func TestSearchSourceRecordsPreservesDependencyFailures(t *testing.T) {
 				reader = panicSimilarSourceRecordReader{}
 			}
 
-			got, err := SearchSourceRecords(t.Context(), embedder, reader, "query", nil, 1)
+			got, err := SearchSourceRecords(t.Context(), embedder, reader, "query", SimilarSourceRecordFilters{}, 1)
 			wantErr := test.providerErr
 			if wantErr == nil {
 				wantErr = test.readerErr
@@ -203,7 +223,7 @@ func TestSearchSourceRecordsPreservesNonNilEmptyResults(t *testing.T) {
 		&embedderStub{batch: validSemanticQueryBatch()},
 		&similarSourceRecordReaderStub{results: want},
 		"query",
-		nil,
+		SimilarSourceRecordFilters{},
 		1,
 	)
 	if err != nil {
@@ -227,6 +247,17 @@ func validSemanticQueryBatch() EmbeddingBatch {
 
 func semanticSource(value string) *string {
 	return &value
+}
+
+func semanticTime(value time.Time) *time.Time {
+	return &value
+}
+
+func semanticWindow(windowStart, windowEnd time.Time) SimilarSourceRecordFilters {
+	return SimilarSourceRecordFilters{
+		PublicationWindowStart: semanticTime(windowStart),
+		PublicationWindowEnd:   semanticTime(windowEnd),
+	}
 }
 
 func semanticSearchResultFixture(id, title string, distance float64) SimilarSourceRecord {
@@ -260,7 +291,7 @@ type similarSourceRecordReaderStub struct {
 	provider    string
 	model       string
 	queryVector []float32
-	source      *string
+	filters     SimilarSourceRecordFilters
 	limit       int
 }
 
@@ -269,17 +300,14 @@ func (reader *similarSourceRecordReaderStub) SimilarSourceRecords(
 	provider string,
 	model string,
 	queryVector []float32,
-	source *string,
+	filters SimilarSourceRecordFilters,
 	limit int,
 ) ([]SimilarSourceRecord, error) {
 	reader.calls++
 	reader.provider = provider
 	reader.model = model
 	reader.queryVector = queryVector
-	if source != nil {
-		copiedSource := *source
-		reader.source = &copiedSource
-	}
+	reader.filters = copySemanticFilters(filters)
 	reader.limit = limit
 	return reader.results, reader.err
 }
@@ -291,8 +319,24 @@ func (panicSimilarSourceRecordReader) SimilarSourceRecords(
 	string,
 	string,
 	[]float32,
-	*string,
+	SimilarSourceRecordFilters,
 	int,
 ) ([]SimilarSourceRecord, error) {
 	panic("similar source record retrieval must not run")
+}
+
+func copySemanticFilters(filters SimilarSourceRecordFilters) SimilarSourceRecordFilters {
+	if filters.Source != nil {
+		copiedSource := *filters.Source
+		filters.Source = &copiedSource
+	}
+	if filters.PublicationWindowStart != nil {
+		copiedStart := *filters.PublicationWindowStart
+		filters.PublicationWindowStart = &copiedStart
+	}
+	if filters.PublicationWindowEnd != nil {
+		copiedEnd := *filters.PublicationWindowEnd
+		filters.PublicationWindowEnd = &copiedEnd
+	}
+	return filters
 }

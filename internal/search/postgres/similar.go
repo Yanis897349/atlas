@@ -16,10 +16,10 @@ func (repository *Repository) SimilarSourceRecords(
 	provider string,
 	model string,
 	queryVector []float32,
-	source *string,
+	filters search.SimilarSourceRecordFilters,
 	limit int,
 ) ([]search.SimilarSourceRecord, error) {
-	provider, model, source, err := normalizeAndValidateSimilarityQuery(provider, model, queryVector, source, limit)
+	provider, model, filters, err := normalizeAndValidateSimilarityQuery(provider, model, queryVector, filters, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,9 @@ func (repository *Repository) SimilarSourceRecords(
 		provider,
 		model,
 		pgvector.NewVector(queryVector),
-		source,
+		filters.Source,
+		filters.PublicationWindowStart,
+		filters.PublicationWindowEnd,
 		limit,
 	)
 	if err != nil {
@@ -79,6 +81,8 @@ SELECT
     matching_embeddings.embedding OPERATOR(public.<=>) $3::public.vector AS cosine_distance
 FROM matching_embeddings
 JOIN source_records ON source_records.id = matching_embeddings.source_record_id
-WHERE $4::text IS NULL OR source_records.source = $4
+WHERE ($4::text IS NULL OR source_records.source = $4)
+  AND ($5::timestamptz IS NULL OR source_records.published_at >= $5)
+  AND ($6::timestamptz IS NULL OR source_records.published_at <= $6)
 ORDER BY cosine_distance, source_records.id
-LIMIT $5`
+LIMIT $7`
