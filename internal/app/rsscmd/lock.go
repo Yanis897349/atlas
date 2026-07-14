@@ -1,4 +1,4 @@
-package app
+package rsscmd
 
 import (
 	"context"
@@ -10,20 +10,20 @@ import (
 )
 
 const (
-	rssIngestionLockReleaseBudget = 5 * time.Second
-	acquireRSSIngestionLockSQL    = `
+	ingestionLockReleaseBudget = 5 * time.Second
+	acquireIngestionLockSQL    = `
 SELECT pg_advisory_lock(
     hashtext(current_database()),
     hashtext(current_schema() || ':atlas:rss:investinglive')
 )`
-	releaseRSSIngestionLockSQL = `
+	releaseIngestionLockSQL = `
 SELECT pg_advisory_unlock(
     hashtext(current_database()),
     hashtext(current_schema() || ':atlas:rss:investinglive')
 )`
 )
 
-func withRSSIngestionLock(
+func withIngestionLock(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	operation func(*pgxpool.Conn) error,
@@ -38,29 +38,29 @@ func withRSSIngestionLock(
 			connection.Release()
 			return
 		}
-		resultErr = errors.Join(resultErr, releaseRSSIngestionLock(connection))
+		resultErr = errors.Join(resultErr, releaseIngestionLock(connection))
 	}()
 
-	if _, err := connection.Exec(ctx, acquireRSSIngestionLockSQL); err != nil {
+	if _, err := connection.Exec(ctx, acquireIngestionLockSQL); err != nil {
 		return fmt.Errorf("acquire InvestingLive RSS ingestion lock: %w", err)
 	}
 	locked = true
 	return operation(connection)
 }
 
-func releaseRSSIngestionLock(connection *pgxpool.Conn) error {
-	ctx, cancel := context.WithTimeout(context.Background(), rssIngestionLockReleaseBudget)
+func releaseIngestionLock(connection *pgxpool.Conn) error {
+	ctx, cancel := context.WithTimeout(context.Background(), ingestionLockReleaseBudget)
 	defer cancel()
 
 	var unlocked bool
-	err := connection.QueryRow(ctx, releaseRSSIngestionLockSQL).Scan(&unlocked)
+	err := connection.QueryRow(ctx, releaseIngestionLockSQL).Scan(&unlocked)
 	if err == nil && unlocked {
 		connection.Release()
 		return nil
 	}
 
 	rawConnection := connection.Hijack()
-	closeContext, closeCancel := context.WithTimeout(context.Background(), rssIngestionLockReleaseBudget)
+	closeContext, closeCancel := context.WithTimeout(context.Background(), ingestionLockReleaseBudget)
 	defer closeCancel()
 	closeErr := rawConnection.Close(closeContext)
 	if err != nil {

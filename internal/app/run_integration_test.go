@@ -127,7 +127,7 @@ LIMIT 1
 		t.Fatalf("load embedding provenance: %v", err)
 	}
 	if provider != "openai" || model != "rss-embedding-model" || strings.Count(vector, ",") != 1 ||
-		createdBy != rssIngestionActor || updatedBy != rssIngestionActor {
+		createdBy != "atlas-rss-ingestion" || updatedBy != "atlas-rss-ingestion" {
 		t.Errorf("embedding metadata = (%q, %q, %q, %q, %q), want normalized provenance, dimension 2, and RSS audit actor", provider, model, vector, createdBy, updatedBy)
 	}
 	if providerCalls.Load() != 2 {
