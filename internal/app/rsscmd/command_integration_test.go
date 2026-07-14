@@ -16,6 +16,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 	"github.com/Yanis897349/atlas/internal/search"
 	searchopenai "github.com/Yanis897349/atlas/internal/search/openai"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestRunEmptyFeedSkipsEmbeddingProvider(t *testing.T) {
@@ -141,6 +142,7 @@ func TestRunReleasesIngestionLockAfterFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("first Run() error = nil, want provider failure")
 	}
+	assertIngestionLockAvailableFromNewSession(t, database.URL)
 
 	successfulEmbeddings := validEmbeddingServer(t)
 	stdout := &bytes.Buffer{}
@@ -159,6 +161,41 @@ func TestRunReleasesIngestionLockAfterFailure(t *testing.T) {
 		t.Errorf("stdout = %q, want successful retry output", stdout.String())
 	}
 	assertPersistenceCounts(t, database, 2, 2)
+}
+
+func assertIngestionLockAvailableFromNewSession(t *testing.T, databaseURL string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	connection, err := pgx.Connect(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("connect independent lock probe: %v", err)
+	}
+	t.Cleanup(func() {
+		closeContext, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer closeCancel()
+		if err := connection.Close(closeContext); err != nil {
+			t.Errorf("close independent lock probe: %v", err)
+		}
+	})
+
+	tryAcquireSQL := strings.Replace(acquireIngestionLockSQL, "pg_advisory_lock", "pg_try_advisory_lock", 1)
+	var acquired bool
+	if err := connection.QueryRow(ctx, tryAcquireSQL).Scan(&acquired); err != nil {
+		t.Fatalf("probe released ingestion lock: %v", err)
+	}
+	if !acquired {
+		t.Fatal("ingestion lock remains held after failed cycle")
+	}
+
+	var released bool
+	if err := connection.QueryRow(ctx, releaseIngestionLockSQL).Scan(&released); err != nil {
+		t.Fatalf("release probed ingestion lock: %v", err)
+	}
+	if !released {
+		t.Fatal("probed ingestion lock was not held by independent session")
+	}
 }
 
 func TestRunSerializesCanonicalTitleAndEmbeddingUpdates(t *testing.T) {
