@@ -105,6 +105,7 @@ func TestAssembleEventContextRejectsInvalidInputBeforeDependencies(t *testing.T)
 	}{
 		{name: "missing event ID", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.EventID = "" }), contains: "event ID must be a UUID"},
 		{name: "malformed event ID", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.EventID = "not-a-uuid" }), contains: "event ID must be a UUID"},
+		{name: "invalid event ID separators", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.EventID = "00000000X0000X0000X0000X000000000083" }), contains: "event ID must be a UUID"},
 		{name: "missing publication start", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.PublicationWindowStart = time.Time{} }), contains: "publication window start is required"},
 		{name: "missing publication end", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.PublicationWindowEnd = time.Time{} }), contains: "publication window end is required"},
 		{name: "reversed publication window", query: withEventContextQuery(valid, func(query *EventContextQuery) {

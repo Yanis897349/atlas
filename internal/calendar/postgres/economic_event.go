@@ -6,12 +6,13 @@ import (
 	"fmt"
 
 	"github.com/Yanis897349/atlas/internal/calendar"
-	"github.com/jackc/pgx/v5/pgtype"
+	atlasuuid "github.com/Yanis897349/atlas/internal/uuid"
 )
 
 // EconomicEvent returns one canonical economic event by UUID.
 func (repository *Repository) EconomicEvent(ctx context.Context, id string) (calendar.StoredEvent, error) {
-	if err := validateEconomicEventID(id); err != nil {
+	id, err := normalizeAndValidateEconomicEventID(id)
+	if err != nil {
 		return calendar.StoredEvent{}, err
 	}
 
@@ -22,12 +23,12 @@ func (repository *Repository) EconomicEvent(ctx context.Context, id string) (cal
 	return event, nil
 }
 
-func validateEconomicEventID(id string) error {
-	var value pgtype.UUID
-	if err := value.Scan(id); err != nil || !value.Valid {
-		return errors.New("event ID must be a UUID")
+func normalizeAndValidateEconomicEventID(id string) (string, error) {
+	normalized, valid := atlasuuid.Normalize(id)
+	if !valid {
+		return "", errors.New("event ID must be a UUID")
 	}
-	return nil
+	return normalized, nil
 }
 
 const economicEventSQL = `

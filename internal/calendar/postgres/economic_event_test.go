@@ -77,7 +77,7 @@ func TestRepositoryEconomicEventValidatesUUIDBeforePostgreSQL(t *testing.T) {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
 
-	for _, id := range []string{"", "not-a-uuid"} {
+	for _, id := range []string{"", "not-a-uuid", "00000000X0000X0000X0000X000000000083"} {
 		got, queryErr := repository.EconomicEvent(t.Context(), id)
 		if queryErr == nil || !strings.Contains(queryErr.Error(), "event ID must be a UUID") {
 			t.Fatalf("EconomicEvent(%q) error = %v, want UUID validation", id, queryErr)

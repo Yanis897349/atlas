@@ -9,7 +9,7 @@ import (
 
 	"github.com/Yanis897349/atlas/internal/calendar"
 	"github.com/Yanis897349/atlas/internal/search"
-	"github.com/jackc/pgx/v5/pgtype"
+	atlasuuid "github.com/Yanis897349/atlas/internal/uuid"
 )
 
 // EventContextQuery selects one economic event and its related source-record window.
@@ -76,8 +76,8 @@ func AssembleEventContext(
 }
 
 func normalizeAndValidateEventContextQuery(query EventContextQuery) (EventContextQuery, error) {
-	var eventID pgtype.UUID
-	if err := eventID.Scan(query.EventID); err != nil || !eventID.Valid {
+	eventID, valid := atlasuuid.Normalize(query.EventID)
+	if !valid {
 		return EventContextQuery{}, errors.New("event ID must be a UUID")
 	}
 	if query.PublicationWindowStart.IsZero() {
@@ -96,7 +96,7 @@ func normalizeAndValidateEventContextQuery(query EventContextQuery) (EventContex
 		)
 	}
 
-	query.EventID = eventID.String()
+	query.EventID = eventID
 	query.PublicationWindowStart = query.PublicationWindowStart.UTC()
 	query.PublicationWindowEnd = query.PublicationWindowEnd.UTC()
 	return query, nil
