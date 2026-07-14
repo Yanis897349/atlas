@@ -15,9 +15,11 @@ func SearchSourceRecords(
 	embedder Embedder,
 	reader SimilarSourceRecordReader,
 	query string,
+	source *string,
 	limit int,
 ) ([]SimilarSourceRecord, error) {
-	if err := validateSemanticSearchQuery(query, limit); err != nil {
+	source, err := normalizeAndValidateSemanticSearchQuery(query, source, limit)
+	if err != nil {
 		return nil, fmt.Errorf("validate semantic source record search: %w", err)
 	}
 
@@ -38,6 +40,7 @@ func SearchSourceRecords(
 		embedding.Provider,
 		embedding.Model,
 		embedding.Vector,
+		source,
 		limit,
 	)
 	if err != nil {
@@ -46,12 +49,19 @@ func SearchSourceRecords(
 	return results, nil
 }
 
-func validateSemanticSearchQuery(query string, limit int) error {
+func normalizeAndValidateSemanticSearchQuery(query string, source *string, limit int) (*string, error) {
 	if strings.TrimSpace(query) == "" {
-		return errors.New("query is required")
+		return nil, errors.New("query is required")
+	}
+	if source != nil {
+		normalizedSource := strings.TrimSpace(*source)
+		if normalizedSource == "" {
+			return nil, errors.New("source is required when supplied")
+		}
+		source = &normalizedSource
 	}
 	if limit < 1 || limit > MaxSimilarSourceRecordsLimit {
-		return fmt.Errorf("limit must be between 1 and %d", MaxSimilarSourceRecordsLimit)
+		return nil, fmt.Errorf("limit must be between 1 and %d", MaxSimilarSourceRecordsLimit)
 	}
-	return nil
+	return source, nil
 }

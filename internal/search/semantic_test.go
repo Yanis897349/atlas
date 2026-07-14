@@ -26,8 +26,9 @@ func TestSearchSourceRecordsEmbedsExactQueryAndPreservesRepositoryResults(t *tes
 		semanticSearchResultFixture("00000000-0000-0000-0000-000000000001", "First canonical headline", 0.3),
 	}
 	reader := &similarSourceRecordReaderStub{results: want}
+	source := "  publisher  "
 
-	got, err := SearchSourceRecords(t.Context(), embedder, reader, query, 17)
+	got, err := SearchSourceRecords(t.Context(), embedder, reader, query, &source, 17)
 	if err != nil {
 		t.Fatalf("SearchSourceRecords() error = %v", err)
 	}
@@ -36,13 +37,15 @@ func TestSearchSourceRecordsEmbedsExactQueryAndPreservesRepositoryResults(t *tes
 		t.Errorf("embedder call = (%d, %#v), want (1, %#v)", embedder.calls, embedder.inputs, wantInputs)
 	}
 	if reader.calls != 1 || reader.provider != "openai" || reader.model != "embedding-model" ||
-		reader.limit != 17 || !reflect.DeepEqual(reader.queryVector, []float32{0.25, 0.5, 0.75}) {
+		reader.source == nil || *reader.source != "publisher" || reader.limit != 17 ||
+		!reflect.DeepEqual(reader.queryVector, []float32{0.25, 0.5, 0.75}) {
 		t.Errorf(
-			"reader call = (%d, %q, %q, %#v, %d), want (1, openai, embedding-model, [0.25 0.5 0.75], 17)",
+			"reader call = (%d, %q, %q, %#v, %#v, %d), want normalized source publisher",
 			reader.calls,
 			reader.provider,
 			reader.model,
 			reader.queryVector,
+			reader.source,
 			reader.limit,
 		)
 	}
@@ -60,10 +63,12 @@ func TestSearchSourceRecordsRejectsInvalidInputBeforeDependencies(t *testing.T) 
 	tests := []struct {
 		name     string
 		query    string
+		source   *string
 		limit    int
 		contains string
 	}{
 		{name: "blank query", query: " \t\n", limit: 1, contains: "query is required"},
+		{name: "blank source", query: "inflation", source: semanticSource(" \t\n"), limit: 1, contains: "source is required when supplied"},
 		{name: "zero limit", query: "inflation", limit: 0, contains: "limit must be between"},
 		{name: "negative limit", query: "inflation", limit: -1, contains: "limit must be between"},
 		{name: "high limit", query: "inflation", limit: MaxSimilarSourceRecordsLimit + 1, contains: "limit must be between"},
@@ -76,6 +81,7 @@ func TestSearchSourceRecordsRejectsInvalidInputBeforeDependencies(t *testing.T) 
 				panicEmbedder{},
 				panicSimilarSourceRecordReader{},
 				test.query,
+				test.source,
 				test.limit,
 			)
 			if err == nil || !strings.Contains(err.Error(), "validate semantic source record search") ||
@@ -140,6 +146,7 @@ func TestSearchSourceRecordsRejectsMalformedQueryEmbedding(t *testing.T) {
 				&embedderStub{batch: test.batch},
 				panicSimilarSourceRecordReader{},
 				"query",
+				nil,
 				1,
 			)
 			if err == nil || !strings.Contains(err.Error(), "validate semantic search query embedding") ||
@@ -174,7 +181,7 @@ func TestSearchSourceRecordsPreservesDependencyFailures(t *testing.T) {
 				reader = panicSimilarSourceRecordReader{}
 			}
 
-			got, err := SearchSourceRecords(t.Context(), embedder, reader, "query", 1)
+			got, err := SearchSourceRecords(t.Context(), embedder, reader, "query", nil, 1)
 			wantErr := test.providerErr
 			if wantErr == nil {
 				wantErr = test.readerErr
@@ -196,6 +203,7 @@ func TestSearchSourceRecordsPreservesNonNilEmptyResults(t *testing.T) {
 		&embedderStub{batch: validSemanticQueryBatch()},
 		&similarSourceRecordReaderStub{results: want},
 		"query",
+		nil,
 		1,
 	)
 	if err != nil {
@@ -215,6 +223,10 @@ func validSemanticQueryBatch() EmbeddingBatch {
 			Vector:         []float32{1, 2},
 		}},
 	}
+}
+
+func semanticSource(value string) *string {
+	return &value
 }
 
 func semanticSearchResultFixture(id, title string, distance float64) SimilarSourceRecord {
@@ -248,6 +260,7 @@ type similarSourceRecordReaderStub struct {
 	provider    string
 	model       string
 	queryVector []float32
+	source      *string
 	limit       int
 }
 
@@ -256,12 +269,17 @@ func (reader *similarSourceRecordReaderStub) SimilarSourceRecords(
 	provider string,
 	model string,
 	queryVector []float32,
+	source *string,
 	limit int,
 ) ([]SimilarSourceRecord, error) {
 	reader.calls++
 	reader.provider = provider
 	reader.model = model
 	reader.queryVector = queryVector
+	if source != nil {
+		copiedSource := *source
+		reader.source = &copiedSource
+	}
 	reader.limit = limit
 	return reader.results, reader.err
 }
@@ -273,6 +291,7 @@ func (panicSimilarSourceRecordReader) SimilarSourceRecords(
 	string,
 	string,
 	[]float32,
+	*string,
 	int,
 ) ([]SimilarSourceRecord, error) {
 	panic("similar source record retrieval must not run")

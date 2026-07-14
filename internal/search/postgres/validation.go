@@ -81,23 +81,31 @@ func normalizeAndValidateSimilarityQuery(
 	provider string,
 	model string,
 	queryVector []float32,
+	source *string,
 	limit int,
-) (string, string, error) {
+) (string, string, *string, error) {
 	provider = strings.TrimSpace(provider)
 	if provider == "" {
-		return "", "", errors.New("provider is required")
+		return "", "", nil, errors.New("provider is required")
 	}
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return "", "", errors.New("model is required")
+		return "", "", nil, errors.New("model is required")
 	}
 	if err := vector.Validate(queryVector); err != nil {
-		return "", "", fmt.Errorf("query %w", err)
+		return "", "", nil, fmt.Errorf("query %w", err)
+	}
+	if source != nil {
+		normalizedSource := strings.TrimSpace(*source)
+		if normalizedSource == "" {
+			return "", "", nil, errors.New("source is required when supplied")
+		}
+		source = &normalizedSource
 	}
 	if limit < 1 || limit > search.MaxSimilarSourceRecordsLimit {
-		return "", "", fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
+		return "", "", nil, fmt.Errorf("limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit)
 	}
-	return provider, model, nil
+	return provider, model, source, nil
 }
 
 func normalizeUUID(value string) (string, bool) {

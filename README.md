@@ -219,6 +219,7 @@ mise exec -- go run ./cmd/atlas index-source-records \
   --actor search-indexer
 mise exec -- go run ./cmd/atlas search-source-records \
   --query 'central bank policy outlook' \
+  --source investinglive \
   --limit 10
 mise exec -- go run ./cmd/atlas create-watchlist \
   --name 'Macro focus' \
@@ -268,7 +269,7 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 
 `index-source-records` remains available for bounded backfills. It reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs the bounded provider requests required by input count and encoded payload size without retries, and repeated indexing is idempotent for unchanged vectors. Scheduling, pagination, non-RSS hooks, and body or content embeddings remain deferred.
 
-`search-source-records` accepts one exact non-blank text query and a result limit from 1 through 100. It embeds the query through the configured OpenAI Embeddings API model and retrieves only stored vectors with matching normalized provider, model, and dimension, ordered by exact pgvector cosine distance and source-record UUID for ties. The command emits each complete canonical source record with UTC timestamps, persistence audit metadata, provider and model provenance, and cosine distance; no matches are represented as `[]`. Publication-window and source filters, pagination, hybrid or lexical ranking, HTTP delivery, and UI presentation remain deferred.
+`search-source-records` accepts one exact non-blank text query, an optional single source filter, and a result limit from 1 through 100. Source filters are trimmed and matched by case-sensitive equality against the canonical source; omitting the filter searches every source. The command embeds the query through the configured OpenAI Embeddings API model and retrieves only stored vectors with matching normalized provider, model, and dimension, ordered by exact pgvector cosine distance and source-record UUID for ties. It emits each complete canonical source record with UTC timestamps, persistence audit metadata, provider and model provenance, and cosine distance; no matches are represented as `[]`. Publication-window filters, multiple-source expressions, pagination, hybrid or lexical ranking, HTTP delivery, and UI presentation remain deferred.
 
 `create-watchlist` atomically persists one user-authored watchlist. It requires a name, an audit actor, and one or more ordered `--symbol` flags; names and actors are trimmed, while symbols are trimmed, canonicalized to uppercase, and rejected when empty or duplicated after normalization. The command emits the complete stored definition with its UUID and audit metadata as JSON.
 

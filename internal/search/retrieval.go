@@ -19,5 +19,5 @@ type SimilarSourceRecord struct {
 
 // SimilarSourceRecordReader retrieves canonical source records ranked by embedding distance.
 type SimilarSourceRecordReader interface {
-	SimilarSourceRecords(context.Context, string, string, []float32, int) ([]SimilarSourceRecord, error)
+	SimilarSourceRecords(context.Context, string, string, []float32, *string, int) ([]SimilarSourceRecord, error)
 }

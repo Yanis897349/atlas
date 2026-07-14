@@ -20,8 +20,12 @@ func TestRepositoryRetrievesSimilarSourceRecords(t *testing.T) {
 	publishedAt := time.Date(2026, time.July, 12, 10, 0, 0, 0, time.UTC)
 	records := make([]ingestion.StoredSourceRecord, 0, 7)
 	for index, itemID := range []string{"tie-a", "tie-b", "orthogonal", "opposite", "other-provider", "other-model", "other-dimension"} {
+		source := "test-source"
+		if itemID == "tie-b" {
+			source = "other-source"
+		}
 		record, err := sourceRepository.UpsertSourceRecord(t.Context(), ingestion.SourceRecord{
-			Source:       "test-source",
+			Source:       source,
 			SourceItemID: itemID,
 			OriginalURL:  "https://example.com/" + itemID,
 			Title:        "Title " + itemID,
@@ -41,7 +45,7 @@ func TestRepositoryRetrievesSimilarSourceRecords(t *testing.T) {
 	persistSimilarityEmbeddings(t, repository, records[5:6], "openai", "other-model", [][]float32{{1, 0}})
 	persistSimilarityEmbeddings(t, repository, records[6:7], "openai", "model-a", [][]float32{{1, 0, 0}})
 
-	got, err := repository.SimilarSourceRecords(t.Context(), " openai ", " model-a ", []float32{1, 0}, 10)
+	got, err := repository.SimilarSourceRecords(t.Context(), " openai ", " model-a ", []float32{1, 0}, nil, 10)
 	if err != nil {
 		t.Fatalf("SimilarSourceRecords() error = %v", err)
 	}
@@ -82,12 +86,38 @@ func TestRepositoryRetrievesSimilarSourceRecords(t *testing.T) {
 		}
 	}
 
-	limited, err := repository.SimilarSourceRecords(t.Context(), "openai", "model-a", []float32{1, 0}, 2)
+	limited, err := repository.SimilarSourceRecords(t.Context(), "openai", "model-a", []float32{1, 0}, nil, 2)
 	if err != nil {
 		t.Fatalf("limited SimilarSourceRecords() error = %v", err)
 	}
 	if len(limited) != 2 || limited[0].SourceRecord.ID != tieIDs[0] || limited[1].SourceRecord.ID != tieIDs[1] {
 		t.Errorf("limited SimilarSourceRecords() = %#v, want UUID-ordered tied results", limited)
+	}
+
+	source := "  test-source  "
+	filtered, err := repository.SimilarSourceRecords(t.Context(), "openai", "model-a", []float32{1, 0}, &source, 10)
+	if err != nil {
+		t.Fatalf("filtered SimilarSourceRecords() error = %v", err)
+	}
+	wantFilteredIDs := []string{records[0].ID, records[2].ID, records[3].ID}
+	if len(filtered) != len(wantFilteredIDs) {
+		t.Fatalf("filtered SimilarSourceRecords() count = %d, want %d", len(filtered), len(wantFilteredIDs))
+	}
+	for index, wantID := range wantFilteredIDs {
+		if filtered[index].SourceRecord.ID != wantID || filtered[index].SourceRecord.Source != "test-source" {
+			t.Errorf("filtered SimilarSourceRecords()[%d] = %#v, want source record %q", index, filtered[index], wantID)
+		}
+	}
+
+	caseSensitiveSource := "TEST-SOURCE"
+	caseSensitive, err := repository.SimilarSourceRecords(
+		t.Context(), "openai", "model-a", []float32{1, 0}, &caseSensitiveSource, 10,
+	)
+	if err != nil {
+		t.Fatalf("case-sensitive SimilarSourceRecords() error = %v", err)
+	}
+	if caseSensitive == nil || len(caseSensitive) != 0 {
+		t.Errorf("case-sensitive SimilarSourceRecords() = %#v, want non-nil empty result", caseSensitive)
 	}
 }
 
@@ -95,7 +125,7 @@ func TestRepositoryReturnsEmptySimilarSourceRecords(t *testing.T) {
 	pool := openTestPool(t)
 	repository, _ := NewRepository(pool)
 
-	got, err := repository.SimilarSourceRecords(t.Context(), "openai", "model-a", []float32{1, 0}, 10)
+	got, err := repository.SimilarSourceRecords(t.Context(), "openai", "model-a", []float32{1, 0}, nil, 10)
 	if err != nil {
 		t.Fatalf("SimilarSourceRecords() error = %v", err)
 	}

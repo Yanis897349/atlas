@@ -35,18 +35,28 @@ func TestRunSearchesSourceRecordsEndToEnd(t *testing.T) {
 		t.Fatalf("NewRepository(source records) error = %v", err)
 	}
 	publishedAt := time.Date(2026, time.July, 12, 14, 0, 0, 123000000, time.FixedZone("Paris", 2*60*60))
-	records := make([]ingestion.StoredSourceRecord, 0, 3)
-	for index, title := range []string{"Exact B", "Orthogonal", "Exact A"} {
+	fixtures := []struct {
+		source string
+		itemID string
+		title  string
+	}{
+		{source: "test-publisher", itemID: "exact-b", title: "Exact B"},
+		{source: "test-publisher", itemID: "orthogonal", title: "Orthogonal"},
+		{source: "test-publisher", itemID: "exact-a", title: "Exact A"},
+		{source: "other-publisher", itemID: "exact-other", title: "Exact Other Source"},
+	}
+	records := make([]ingestion.StoredSourceRecord, 0, len(fixtures))
+	for index, fixture := range fixtures {
 		record, persistErr := sourceRepository.UpsertSourceRecord(t.Context(), ingestion.SourceRecord{
-			Source:       "test-publisher",
-			SourceItemID: []string{"exact-b", "orthogonal", "exact-a"}[index],
-			OriginalURL:  "https://example.com/news/" + []string{"exact-b", "orthogonal", "exact-a"}[index],
-			Title:        title,
+			Source:       fixture.source,
+			SourceItemID: fixture.itemID,
+			OriginalURL:  "https://example.com/news/" + fixture.itemID,
+			Title:        fixture.title,
 			PublishedAt:  publishedAt.Add(time.Duration(index) * time.Minute),
 			RetrievedAt:  publishedAt.Add(time.Duration(index+1) * time.Minute),
 		}, "rss-ingestion")
 		if persistErr != nil {
-			t.Fatalf("UpsertSourceRecord(%q) error = %v", title, persistErr)
+			t.Fatalf("UpsertSourceRecord(%q) error = %v", fixture.title, persistErr)
 		}
 		records = append(records, record)
 	}
@@ -59,6 +69,7 @@ func TestRunSearchesSourceRecordsEndToEnd(t *testing.T) {
 		{SourceRecordID: records[0].ID, Provider: "openai", Model: "embedding-model", Vector: []float32{1, 0}},
 		{SourceRecordID: records[1].ID, Provider: "openai", Model: "embedding-model", Vector: []float32{0, 1}},
 		{SourceRecordID: records[2].ID, Provider: "openai", Model: "embedding-model", Vector: []float32{1, 0}},
+		{SourceRecordID: records[3].ID, Provider: "openai", Model: "embedding-model", Vector: []float32{1, 0}},
 	}, "search-indexer"); err != nil {
 		t.Fatalf("PersistSourceRecordEmbeddings() error = %v", err)
 	}
@@ -102,7 +113,7 @@ func TestRunSearchesSourceRecordsEndToEnd(t *testing.T) {
 	dependencies.Stdout = stdout
 
 	arguments := []string{
-		"search-source-records", "--query", "  exact semantic query  ", "--limit", "3",
+		"search-source-records", "--query", "  exact semantic query  ", "--limit", "4",
 	}
 	if err := Run(t.Context(), arguments, dependencies); err != nil {
 		t.Fatalf("Run(search-source-records) error = %v", err)
@@ -111,31 +122,55 @@ func TestRunSearchesSourceRecordsEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("decode command output: %v", err)
 	}
-	exactRecords := []ingestion.StoredSourceRecord{records[0], records[2]}
+	exactRecords := []ingestion.StoredSourceRecord{records[0], records[2], records[3]}
 	sort.Slice(exactRecords, func(left, right int) bool { return exactRecords[left].ID < exactRecords[right].ID })
-	wantIDs := []string{exactRecords[0].ID, exactRecords[1].ID, records[1].ID}
-	if len(output) != 3 {
-		t.Fatalf("output = %#v, want three matches", output)
+	wantIDs := []string{exactRecords[0].ID, exactRecords[1].ID, exactRecords[2].ID, records[1].ID}
+	if len(output) != 4 {
+		t.Fatalf("output = %#v, want four unfiltered matches", output)
 	}
 	for index := range output {
-		if output[index].ID != wantIDs[index] || output[index].Source != "test-publisher" ||
+		if output[index].ID != wantIDs[index] ||
 			output[index].OriginalURL == "" || output[index].PublishedAt == "" ||
 			output[index].CreatedAt == "" || output[index].CreatedBy != "rss-ingestion" ||
 			output[index].Provider != "openai" || output[index].Model != "embedding-model" {
 			t.Errorf("output[%d] = %#v, want complete canonical match %q", index, output[index], wantIDs[index])
 		}
 	}
-	if output[0].CosineDistance != 0 || output[1].CosineDistance != 0 || output[2].CosineDistance != 1 {
-		t.Errorf("distances = [%v %v %v], want [0 0 1]", output[0].CosineDistance, output[1].CosineDistance, output[2].CosineDistance)
+	if output[0].CosineDistance != 0 || output[1].CosineDistance != 0 ||
+		output[2].CosineDistance != 0 || output[3].CosineDistance != 1 {
+		t.Errorf("distances = [%v %v %v %v], want [0 0 0 1]", output[0].CosineDistance, output[1].CosineDistance, output[2].CosineDistance, output[3].CosineDistance)
+	}
+
+	stdout.Reset()
+	filteredArguments := append(append([]string(nil), arguments...), "--source", "  test-publisher  ")
+	if err := Run(t.Context(), filteredArguments, dependencies); err != nil {
+		t.Fatalf("Run(search-source-records filtered) error = %v", err)
+	}
+	output = nil
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode filtered command output: %v", err)
+	}
+	filteredExactRecords := []ingestion.StoredSourceRecord{records[0], records[2]}
+	sort.Slice(filteredExactRecords, func(left, right int) bool {
+		return filteredExactRecords[left].ID < filteredExactRecords[right].ID
+	})
+	wantFilteredIDs := []string{filteredExactRecords[0].ID, filteredExactRecords[1].ID, records[1].ID}
+	if len(output) != len(wantFilteredIDs) {
+		t.Fatalf("filtered output = %#v, want three test-publisher matches", output)
+	}
+	for index, wantID := range wantFilteredIDs {
+		if output[index].ID != wantID || output[index].Source != "test-publisher" {
+			t.Errorf("filtered output[%d] = %#v, want test-publisher match %q", index, output[index], wantID)
+		}
 	}
 
 	stdout.Reset()
 	env["ATLAS_OPENAI_EMBEDDING_MODEL"] = "unindexed-model"
-	if err := Run(t.Context(), arguments, dependencies); err != nil {
+	if err := Run(t.Context(), filteredArguments, dependencies); err != nil {
 		t.Fatalf("Run(search-source-records empty) error = %v", err)
 	}
-	if stdout.String() != "[]\n" || providerCalls.Load() != 2 {
-		t.Errorf("empty search = %q with %d provider calls, want [] after second query embedding", stdout.String(), providerCalls.Load())
+	if stdout.String() != "[]\n" || providerCalls.Load() != 3 {
+		t.Errorf("empty search = %q with %d provider calls, want [] after third query embedding", stdout.String(), providerCalls.Load())
 	}
 }
 

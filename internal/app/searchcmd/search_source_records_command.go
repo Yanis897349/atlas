@@ -34,7 +34,7 @@ func runSearchSourceRecords(
 	stdout io.Writer,
 	command searchSourceRecordsCommand,
 ) error {
-	results, err := search.SearchSourceRecords(ctx, embedder, reader, command.query, command.limit)
+	results, err := search.SearchSourceRecords(ctx, embedder, reader, command.query, command.source, command.limit)
 	if err != nil {
 		return fmt.Errorf("search source records: %w", err)
 	}
