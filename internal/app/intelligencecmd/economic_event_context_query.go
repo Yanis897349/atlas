@@ -78,6 +78,7 @@ func parseEconomicEventContextQuery(arguments []string) (intelligence.EventConte
 		PublicationWindowStart: windowStart.UTC(),
 		PublicationWindowEnd:   windowEnd.UTC(),
 		SourceRecordLimit:      limit,
+		ObservationLimit:       intelligence.MaxEventObservationsLimit,
 	}, nil
 }
 

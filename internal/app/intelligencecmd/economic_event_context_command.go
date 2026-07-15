@@ -55,12 +55,20 @@ type economicEventSourceOutput struct {
 func runEconomicEventContext(
 	ctx context.Context,
 	events intelligence.EconomicEventReader,
+	observations intelligence.ObservationReader,
 	embedder search.Embedder,
 	sourceRecords search.SimilarSourceRecordReader,
 	stdout io.Writer,
 	query intelligence.EventContextQuery,
 ) error {
-	assembled, err := intelligence.AssembleEventContext(ctx, events, embedder, sourceRecords, query)
+	assembled, err := intelligence.AssembleEventContext(
+		ctx,
+		events,
+		observations,
+		embedder,
+		sourceRecords,
+		query,
+	)
 	if err != nil {
 		return fmt.Errorf("assemble economic event context: %w", err)
 	}

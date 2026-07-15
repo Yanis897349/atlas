@@ -24,6 +24,17 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 	windowEnd := windowStart.Add(4 * time.Hour)
 	event := storedEventFixture("  Consumer Price Index  ", windowEnd)
 	events := &economicEventReaderStub{event: event}
+	observations := &observationReaderStub{results: []intelligence.StoredObservation{{
+		ID: "00000000-0000-0000-0000-000000000087",
+		Observation: intelligence.Observation{
+			EconomicEventID:     event.ID,
+			Source:              "official-statistics",
+			SourceObservationID: "cpi-2026-07",
+			SourceURL:           "https://example.com/releases/cpi-2026-07",
+			ObservedAt:          windowEnd,
+			Actual:              observationValue("3.3%"),
+		},
+	}}}
 	embedder := &embedderStub{batch: search.EmbeddingBatch{
 		Provider: " openai ",
 		Model:    " embedding-model ",
@@ -43,14 +54,16 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 		PublicationWindowStart: windowStart,
 		PublicationWindowEnd:   windowEnd,
 		SourceRecordLimit:      2,
+		ObservationLimit:       7,
 	}
 
-	if err := runEconomicEventContext(t.Context(), events, embedder, sources, stdout, query); err != nil {
+	if err := runEconomicEventContext(t.Context(), events, observations, embedder, sources, stdout, query); err != nil {
 		t.Fatalf("runEconomicEventContext() error = %v", err)
 	}
-	if events.id != validEventID || !reflect.DeepEqual(embedder.inputs, []search.EmbeddingInput{{
-		SourceRecordID: "semantic-search-query", Text: event.Name,
-	}}) || sources.provider != "openai" || sources.model != "embedding-model" ||
+	if events.id != validEventID || observations.eventID != validEventID || observations.limit != 7 ||
+		!reflect.DeepEqual(embedder.inputs, []search.EmbeddingInput{{
+			SourceRecordID: "semantic-search-query", Text: event.Name,
+		}}) || sources.provider != "openai" || sources.model != "embedding-model" ||
 		!reflect.DeepEqual(sources.vector, []float32{1, 2}) || sources.limit != 2 ||
 		sources.filters.PublicationWindowStart == nil ||
 		*sources.filters.PublicationWindowStart != windowStart.UTC() ||
@@ -61,6 +74,13 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 	var got economicEventContextOutput
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("decode output: %v", err)
+	}
+	var encoded map[string]json.RawMessage
+	if err := json.Unmarshal(stdout.Bytes(), &encoded); err != nil {
+		t.Fatalf("decode output keys: %v", err)
+	}
+	if _, exists := encoded["observations"]; exists || len(encoded) != 4 {
+		t.Errorf("output keys = %v, want unchanged event context schema", reflect.ValueOf(encoded).MapKeys())
 	}
 	if got.Event.ID != validEventID || got.Event.SourceURL == "" || got.Event.CreatedBy != "calendar-ingestion" ||
 		got.Event.UpdatedBy != "calendar-refresh" || got.Event.ScheduledAt != "2026-07-12T12:00:00Z" ||
@@ -81,6 +101,7 @@ func TestRunEconomicEventContextWritesEmptySourceArray(t *testing.T) {
 	err := runEconomicEventContext(
 		t.Context(),
 		&economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())},
+		&observationReaderStub{results: []intelligence.StoredObservation{}},
 		&embedderStub{batch: validEmbeddingBatch()},
 		&similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}},
 		stdout,
@@ -103,26 +124,34 @@ func TestRunEconomicEventContextWritesEmptySourceArray(t *testing.T) {
 func TestRunEconomicEventContextPreservesFailuresWithoutBufferedOutput(t *testing.T) {
 	wantErr := errors.New("dependency unavailable")
 	tests := []struct {
-		name     string
-		events   intelligence.EconomicEventReader
-		embedder search.Embedder
-		sources  search.SimilarSourceRecordReader
-		stdout   io.Writer
-		contains string
-		wantErr  error
+		name         string
+		events       intelligence.EconomicEventReader
+		observations intelligence.ObservationReader
+		embedder     search.Embedder
+		sources      search.SimilarSourceRecordReader
+		stdout       io.Writer
+		contains     string
+		wantErr      error
 	}{
-		{name: "event repository", events: &economicEventReaderStub{err: wantErr}, embedder: panicEmbedder{}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "retrieve economic event", wantErr: wantErr},
-		{name: "cancellation", events: &economicEventReaderStub{err: context.Canceled}, embedder: panicEmbedder{}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "retrieve economic event", wantErr: context.Canceled},
-		{name: "provider", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, embedder: &embedderStub{err: wantErr}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "embed semantic search query", wantErr: wantErr},
-		{name: "source repository", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{err: wantErr}, stdout: &bytes.Buffer{}, contains: "retrieve similar source records", wantErr: wantErr},
-		{name: "encoding", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{{CosineDistance: math.NaN()}}}, stdout: &bytes.Buffer{}, contains: "encode economic event context"},
-		{name: "writer", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}}, stdout: errorWriter{err: wantErr}, contains: "write economic event context", wantErr: wantErr},
-		{name: "short writer", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}}, stdout: shortWriter{}, contains: "short write", wantErr: io.ErrShortWrite},
+		{name: "event repository", events: &economicEventReaderStub{err: wantErr}, observations: panicObservationReader{}, embedder: panicEmbedder{}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "retrieve economic event", wantErr: wantErr},
+		{name: "cancellation", events: &economicEventReaderStub{err: context.Canceled}, observations: panicObservationReader{}, embedder: panicEmbedder{}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "retrieve economic event", wantErr: context.Canceled},
+		{name: "observation repository", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, observations: &observationReaderStub{err: wantErr}, embedder: panicEmbedder{}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "retrieve economic event observations", wantErr: wantErr},
+		{name: "provider", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, observations: emptyObservationReader(), embedder: &embedderStub{err: wantErr}, sources: panicSimilarSourceRecordReader{}, stdout: &bytes.Buffer{}, contains: "embed semantic search query", wantErr: wantErr},
+		{name: "source repository", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, observations: emptyObservationReader(), embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{err: wantErr}, stdout: &bytes.Buffer{}, contains: "retrieve similar source records", wantErr: wantErr},
+		{name: "encoding", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, observations: emptyObservationReader(), embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{{CosineDistance: math.NaN()}}}, stdout: &bytes.Buffer{}, contains: "encode economic event context"},
+		{name: "writer", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, observations: emptyObservationReader(), embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}}, stdout: errorWriter{err: wantErr}, contains: "write economic event context", wantErr: wantErr},
+		{name: "short writer", events: &economicEventReaderStub{event: storedEventFixture("Inflation", time.Now())}, observations: emptyObservationReader(), embedder: &embedderStub{batch: validEmbeddingBatch()}, sources: &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}}, stdout: shortWriter{}, contains: "short write", wantErr: io.ErrShortWrite},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			err := runEconomicEventContext(
-				t.Context(), test.events, test.embedder, test.sources, test.stdout, validEventContextQuery(),
+				t.Context(),
+				test.events,
+				test.observations,
+				test.embedder,
+				test.sources,
+				test.stdout,
+				validEventContextQuery(),
 			)
 			if err == nil || !strings.Contains(err.Error(), test.contains) ||
 				(test.wantErr != nil && !errors.Is(err, test.wantErr)) {
@@ -144,6 +173,7 @@ func validEventContextQuery() intelligence.EventContextQuery {
 		PublicationWindowStart: start,
 		PublicationWindowEnd:   start.Add(4 * time.Hour),
 		SourceRecordLimit:      10,
+		ObservationLimit:       intelligence.MaxEventObservationsLimit,
 	}
 }
 
@@ -217,6 +247,31 @@ func (reader *economicEventReaderStub) EconomicEvent(_ context.Context, id strin
 	return reader.event, reader.err
 }
 
+type observationReaderStub struct {
+	results []intelligence.StoredObservation
+	err     error
+	eventID string
+	limit   int
+}
+
+func (reader *observationReaderStub) EventObservations(
+	_ context.Context,
+	eventID string,
+	limit int,
+) ([]intelligence.StoredObservation, error) {
+	reader.eventID = eventID
+	reader.limit = limit
+	return reader.results, reader.err
+}
+
+func emptyObservationReader() intelligence.ObservationReader {
+	return &observationReaderStub{results: []intelligence.StoredObservation{}}
+}
+
+func observationValue(value string) *string {
+	return &value
+}
+
 type embedderStub struct {
 	batch  search.EmbeddingBatch
 	err    error
@@ -261,6 +316,16 @@ type panicEmbedder struct{}
 
 func (panicEmbedder) Embed(context.Context, []search.EmbeddingInput) (search.EmbeddingBatch, error) {
 	panic("embedder must not be called")
+}
+
+type panicObservationReader struct{}
+
+func (panicObservationReader) EventObservations(
+	context.Context,
+	string,
+	int,
+) ([]intelligence.StoredObservation, error) {
+	panic("observation reader must not be called")
 }
 
 type panicSimilarSourceRecordReader struct{}

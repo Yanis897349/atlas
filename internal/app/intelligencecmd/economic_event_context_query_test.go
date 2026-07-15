@@ -23,7 +23,8 @@ func TestParseEconomicEventContextNormalizesInput(t *testing.T) {
 	if command.name != "economic-event-context" ||
 		command.query.EventID != "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" ||
 		command.query.PublicationWindowStart != wantStart || command.query.PublicationWindowEnd != wantEnd ||
-		command.query.SourceRecordLimit != 24 {
+		command.query.SourceRecordLimit != 24 ||
+		command.query.ObservationLimit != 100 {
 		t.Errorf("command = %#v, want normalized complete query", command)
 	}
 }

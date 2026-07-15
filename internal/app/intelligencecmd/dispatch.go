@@ -32,6 +32,7 @@ func Parse(arguments []string) (Command, bool, error) {
 func Run(
 	ctx context.Context,
 	events intelligence.EconomicEventReader,
+	observations intelligence.ObservationReader,
 	embedder search.Embedder,
 	sourceRecords search.SimilarSourceRecordReader,
 	stdout io.Writer,
@@ -39,7 +40,7 @@ func Run(
 ) error {
 	switch command.name {
 	case "economic-event-context":
-		return runEconomicEventContext(ctx, events, embedder, sourceRecords, stdout, command.query)
+		return runEconomicEventContext(ctx, events, observations, embedder, sourceRecords, stdout, command.query)
 	default:
 		panic("validated intelligence command is not handled")
 	}

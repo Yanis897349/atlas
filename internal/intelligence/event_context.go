@@ -12,19 +12,21 @@ import (
 	atlasuuid "github.com/Yanis897349/atlas/internal/uuid"
 )
 
-// EventContextQuery selects one economic event and its related source-record window.
+// EventContextQuery selects one economic event, its observations, and its related source-record window.
 type EventContextQuery struct {
 	EventID                string
 	PublicationWindowStart time.Time
 	PublicationWindowEnd   time.Time
 	SourceRecordLimit      int
+	ObservationLimit       int
 }
 
-// EventContext contains one canonical event and its semantically related source records.
+// EventContext contains one canonical event, its observations, and semantically related source records.
 type EventContext struct {
 	Event                  calendar.StoredEvent
 	PublicationWindowStart time.Time
 	PublicationWindowEnd   time.Time
+	Observations           []StoredObservation
 	SourceRecords          []search.SimilarSourceRecord
 }
 
@@ -33,10 +35,11 @@ type EconomicEventReader interface {
 	EconomicEvent(context.Context, string) (calendar.StoredEvent, error)
 }
 
-// AssembleEventContext loads one event and retrieves source records related to its exact persisted name.
+// AssembleEventContext loads one event, its observations, and source records related to its exact persisted name.
 func AssembleEventContext(
 	ctx context.Context,
 	events EconomicEventReader,
+	observations ObservationReader,
 	embedder search.Embedder,
 	sourceRecords search.SimilarSourceRecordReader,
 	query EventContextQuery,
@@ -49,6 +52,11 @@ func AssembleEventContext(
 	event, err := events.EconomicEvent(ctx, query.EventID)
 	if err != nil {
 		return EventContext{}, fmt.Errorf("retrieve economic event: %w", err)
+	}
+
+	eventObservations, err := observations.EventObservations(ctx, event.ID, query.ObservationLimit)
+	if err != nil {
+		return EventContext{}, fmt.Errorf("retrieve economic event observations: %w", err)
 	}
 
 	filters := search.SimilarSourceRecordFilters{
@@ -71,6 +79,7 @@ func AssembleEventContext(
 		Event:                  event,
 		PublicationWindowStart: query.PublicationWindowStart,
 		PublicationWindowEnd:   query.PublicationWindowEnd,
+		Observations:           eventObservations,
 		SourceRecords:          records,
 	}, nil
 }
@@ -93,6 +102,12 @@ func normalizeAndValidateEventContextQuery(query EventContextQuery) (EventContex
 		return EventContextQuery{}, fmt.Errorf(
 			"source record limit must be between 1 and %d",
 			search.MaxSimilarSourceRecordsLimit,
+		)
+	}
+	if query.ObservationLimit < 1 || query.ObservationLimit > MaxEventObservationsLimit {
+		return EventContextQuery{}, fmt.Errorf(
+			"observation limit must be between 1 and %d",
+			MaxEventObservationsLimit,
 		)
 	}
 

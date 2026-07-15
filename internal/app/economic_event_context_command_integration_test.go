@@ -17,6 +17,8 @@ import (
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
 	"github.com/Yanis897349/atlas/internal/ingestion"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
+	"github.com/Yanis897349/atlas/internal/intelligence"
+	intelligencepostgres "github.com/Yanis897349/atlas/internal/intelligence/postgres"
 	"github.com/Yanis897349/atlas/internal/search"
 	searchpostgres "github.com/Yanis897349/atlas/internal/search/postgres"
 	"github.com/jackc/pgx/v5"
@@ -52,6 +54,21 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	}, "calendar-ingestion")
 	if err != nil {
 		t.Fatalf("UpsertEvent() error = %v", err)
+	}
+	observationRepository, err := intelligencepostgres.NewRepository(database.Pool)
+	if err != nil {
+		t.Fatalf("NewRepository(observations) error = %v", err)
+	}
+	actual := "3.3%"
+	if _, err := observationRepository.UpsertObservation(t.Context(), intelligence.Observation{
+		EconomicEventID:     event.ID,
+		Source:              "official-statistics",
+		SourceObservationID: "cpi-2026-07",
+		SourceURL:           "https://example.com/releases/cpi-2026-07",
+		ObservedAt:          windowEnd.Add(time.Hour),
+		Actual:              &actual,
+	}, "observation-ingestion"); err != nil {
+		t.Fatalf("UpsertObservation() error = %v", err)
 	}
 
 	sourceRepository, err := ingestionpostgres.NewRepository(database.Pool)
@@ -159,6 +176,13 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	var output economicEventContextIntegrationOutput
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("decode command output: %v", err)
+	}
+	var outputFields map[string]json.RawMessage
+	if err := json.Unmarshal(stdout.Bytes(), &outputFields); err != nil {
+		t.Fatalf("decode command output fields: %v", err)
+	}
+	if _, exists := outputFields["observations"]; exists || len(outputFields) != 4 {
+		t.Errorf("command output fields = %v, want unchanged schema without observations", outputFields)
 	}
 	if output.Event.ID != event.ID || output.Event.Source != event.Source ||
 		output.Event.ExternalEventID != event.ExternalEventID || output.Event.Name != event.Name ||
