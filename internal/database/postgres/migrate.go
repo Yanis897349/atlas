@@ -33,6 +33,9 @@ var economicEventsScheduledAtIndexMigration string
 //go:embed migrations/000008_create_source_record_embeddings.up.sql
 var sourceRecordEmbeddingsMigration string
 
+//go:embed migrations/000009_create_economic_event_observations.up.sql
+var economicEventObservationsMigration string
+
 var migrations = []struct {
 	version int64
 	query   string
@@ -45,6 +48,7 @@ var migrations = []struct {
 	{version: 6, query: watchlistEventLinksMigration},
 	{version: 7, query: economicEventsScheduledAtIndexMigration},
 	{version: 8, query: sourceRecordEmbeddingsMigration},
+	{version: 9, query: economicEventObservationsMigration},
 }
 
 // Migrate applies pending database migrations transactionally.
