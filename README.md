@@ -223,6 +223,11 @@ mise exec -- go run ./cmd/atlas search-source-records \
   --from 2026-07-10T12:00:00Z \
   --to 2026-07-11T12:00:00Z \
   --limit 10
+mise exec -- go run ./cmd/atlas economic-event-context \
+  --event-id 00000000-0000-0000-0000-000000000001 \
+  --from 2026-07-10T12:00:00Z \
+  --to 2026-07-11T12:00:00Z \
+  --limit 10
 mise exec -- go run ./cmd/atlas create-watchlist \
   --name 'Macro focus' \
   --actor analyst \
@@ -272,6 +277,8 @@ mise exec -- go run ./cmd/atlas watchlist-events \
 `index-source-records` remains available for bounded backfills. It reads up to 100 canonical source records from one inclusive RFC 3339 publication window, newest first with UUID tie-breaking, embeds each exact persisted title through the OpenAI Embeddings API, and atomically inserts or replaces its provider- and model-specific pgvector representation with the supplied audit actor. The command emits deterministic JSON metadata in retrieval order containing each source-record UUID, normalized provider and model provenance, and vector dimension without exposing vectors; an empty window emits `[]` without calling the provider. Each invocation performs the bounded provider requests required by input count and encoded payload size without retries, and repeated indexing is idempotent for unchanged vectors. Scheduling, pagination, non-RSS hooks, and body or content embeddings remain deferred.
 
 `search-source-records` accepts one exact non-blank text query, an optional single source filter, optional paired inclusive RFC 3339 publication bounds, and a result limit from 1 through 100. Source filters are trimmed and matched by case-sensitive equality against the canonical source; omitting the source filter searches every source. Publication bounds filter canonical publication timestamps and must be supplied together as `--from` and `--to`; omitting both leaves publication time unbounded. The command embeds the query through the configured OpenAI Embeddings API model and retrieves only stored vectors with matching normalized provider, model, and dimension, ordered by exact pgvector cosine distance and source-record UUID for ties. It emits each complete canonical source record with UTC timestamps, persistence audit metadata, provider and model provenance, and cosine distance; no matches are represented as `[]`. One-sided publication windows, multiple-source expressions, pagination, hybrid or lexical ranking, HTTP delivery, and UI presentation remain deferred.
+
+`economic-event-context` accepts one canonical economic-event UUID, a required inclusive RFC 3339 source-publication window, and a source-record limit from 1 through 100. It loads the complete source-cited event, embeds its exact persisted name through the configured OpenAI Embeddings API model, and retrieves only source records within the publication window whose stored vectors match the normalized provider, model, and dimension. The command emits a deterministic JSON envelope containing the complete event, normalized UTC window, and complete canonical source records in exact cosine-distance then UUID order with persistence audit metadata and model provenance; no matches are represented as `[]`. A missing event returns a not-found error without calling the provider or emitting JSON, and validation, configuration, provider, database, or cancellation failures emit no partial result. Consensus, previous and actual observations, historical series, generated analysis, persistence, HTTP delivery, and UI presentation remain deferred.
 
 `create-watchlist` atomically persists one user-authored watchlist. It requires a name, an audit actor, and one or more ordered `--symbol` flags; names and actors are trimmed, while symbols are trimmed, canonicalized to uppercase, and rejected when empty or duplicated after normalization. The command emits the complete stored definition with its UUID and audit metadata as JSON.
 

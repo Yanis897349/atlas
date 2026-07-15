@@ -79,7 +79,7 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		}
 	}
 	sourceRecordEmbedder, err := configuredSourceRecordEmbedder(
-		parsedCommand.searchCommand != nil || parsedCommand.name == "ingest-rss",
+		parsedCommand.searchCommand != nil || parsedCommand.intelligenceCommand != nil || parsedCommand.name == "ingest-rss",
 		getenv,
 		dependencies,
 	)
@@ -108,6 +108,9 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			dependencies,
 			stdout,
 		)
+	}
+	if parsedCommand.intelligenceCommand != nil {
+		return runIntelligenceCommand(ctx, pool, sourceRecordEmbedder, stdout, *parsedCommand.intelligenceCommand)
 	}
 	if parsedCommand.watchlistCommand != nil {
 		repository, err := watchlistpostgres.NewRepository(pool)
