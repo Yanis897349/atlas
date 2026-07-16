@@ -62,7 +62,7 @@ func normalizeResponse(
 	for _, target := range targets {
 		requested[string(target.Series)] = struct{}{}
 	}
-	snapshots := make(map[string]snapshot, len(targets))
+	seriesByID := make(map[string]normalizedSeries, len(targets))
 	for index, series := range response.Results.Series {
 		seriesID := strings.TrimSpace(series.SeriesID)
 		if _, exists := requested[seriesID]; !exists {
@@ -72,21 +72,22 @@ func normalizeResponse(
 		if err != nil {
 			return nil, fmt.Errorf("normalize BLS API response series %q: %w", seriesID, err)
 		}
-		if existing, exists := snapshots[seriesID]; exists {
+		if existing, exists := seriesByID[seriesID]; exists {
 			if !reflect.DeepEqual(existing, normalized) {
 				return nil, fmt.Errorf("BLS API response contains conflicting series %q", seriesID)
 			}
 			continue
 		}
-		snapshots[seriesID] = normalized
+		seriesByID[seriesID] = normalized
 	}
 
 	observations := make([]intelligence.Observation, 0, len(targets))
 	for _, target := range targets {
-		snapshot, exists := snapshots[string(target.Series)]
+		normalized, exists := seriesByID[string(target.Series)]
 		if !exists {
 			return nil, fmt.Errorf("BLS API response is missing requested series %q", target.Series)
 		}
+		snapshot := normalized.snapshot
 		actual := snapshot.actual
 		previous := snapshot.previous
 		observations = append(observations, intelligence.Observation{

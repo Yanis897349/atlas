@@ -199,7 +199,9 @@ func TestAdapterFetchObservationsRejectsInvalidResponses(t *testing.T) {
 		{name: "insufficient payroll history", body: successfulSeries("CES0000000001", monthlyData("2026", "M06", "159000")), targets: []bls.Target{{EconomicEventID: employmentEventID, Series: bls.SeriesTotalNonfarmPayrollSA}}, contains: "requires at least 3"},
 		{name: "fractional payroll", body: successfulSeries("CES0000000001", payrollHistory(map[string]string{"2026-M05": "158900.5"}, "")), targets: []bls.Target{{EconomicEventID: employmentEventID, Series: bls.SeriesTotalNonfarmPayrollSA}}, contains: "payroll value must be an integer"},
 		{name: "conflicting period", body: successfulSeries("CUUR0000SA0", validData("1")+`,`+validData("2")), contains: "conflicting values"},
-		{name: "conflicting repeated series", body: `{"status":"REQUEST_SUCCEEDED","Results":{"series":[` + seriesJSON("CUUR0000SA0", validCPIHistory(nil, "")) + `,` + seriesJSON("CUUR0000SA0", cpiHistory(map[string]string{"2026-M06": "322.500"}, "")) + `]}}`, contains: "conflicting series"},
+		{name: "conflicting repeated series output", body: `{"status":"REQUEST_SUCCEEDED","Results":{"series":[` + seriesJSON("CUUR0000SA0", validCPIHistory(nil, "")) + `,` + seriesJSON("CUUR0000SA0", cpiHistory(map[string]string{"2026-M06": "322.500"}, "")) + `]}}`, contains: "conflicting series"},
+		{name: "conflicting repeated CPI history with same changes", body: `{"status":"REQUEST_SUCCEEDED","Results":{"series":[` + seriesJSON("CUUR0000SA0", validCPIHistory(nil, "")) + `,` + seriesJSON("CUUR0000SA0", cpiHistory(map[string]string{"2026-M04": "999.000"}, "")) + `]}}`, contains: "conflicting series"},
+		{name: "conflicting repeated payroll history with same changes", body: `{"status":"REQUEST_SUCCEEDED","Results":{"series":[` + seriesJSON("CES0000000001", payrollHistory(nil, "")) + `,` + seriesJSON("CES0000000001", payrollHistory(map[string]string{"2026-M06": "259000", "2026-M05": "258900", "2026-M04": "258850"}, "")) + `]}}`, targets: []bls.Target{{EconomicEventID: employmentEventID, Series: bls.SeriesTotalNonfarmPayrollSA}}, contains: "conflicting series"},
 	}
 
 	for _, test := range tests {

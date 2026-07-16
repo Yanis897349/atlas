@@ -12,13 +12,25 @@ type monthlyValue struct {
 	year    string
 	period  string
 	ordinal int
+	raw     string
 	value   decimal
 }
 
-func normalizeSeries(series apiSeries) (snapshot, error) {
+type normalizedSeries struct {
+	snapshot snapshot
+	history  []monthlyHistory
+}
+
+type monthlyHistory struct {
+	year   string
+	period string
+	value  string
+}
+
+func normalizeSeries(series apiSeries) (normalizedSeries, error) {
 	seriesID := strings.TrimSpace(series.SeriesID)
 	if seriesID == "" {
-		return snapshot{}, errors.New("series ID is required")
+		return normalizedSeries{}, errors.New("series ID is required")
 	}
 
 	values := make([]monthlyValue, 0, len(series.Data))
@@ -26,12 +38,12 @@ func normalizeSeries(series apiSeries) (snapshot, error) {
 	for index, data := range series.Data {
 		value, err := normalizeData(data, Series(seriesID))
 		if err != nil {
-			return snapshot{}, fmt.Errorf("data point %d: %w", index+1, err)
+			return normalizedSeries{}, fmt.Errorf("data point %d: %w", index+1, err)
 		}
 		identity := data.Year + "-" + data.Period
 		if value, exists := seen[identity]; exists {
 			if value != data.Value {
-				return snapshot{}, fmt.Errorf("period %q has conflicting values", identity)
+				return normalizedSeries{}, fmt.Errorf("period %q has conflicting values", identity)
 			}
 			continue
 		}
@@ -39,7 +51,7 @@ func normalizeSeries(series apiSeries) (snapshot, error) {
 		values = append(values, value)
 	}
 	if len(values) == 0 {
-		return snapshot{}, errors.New("at least one monthly data point is required")
+		return normalizedSeries{}, errors.New("at least one monthly data point is required")
 	}
 	sort.Slice(values, func(left, right int) bool {
 		return values[left].ordinal > values[right].ordinal
@@ -50,7 +62,7 @@ func normalizeSeries(series apiSeries) (snapshot, error) {
 		required = 14
 	}
 	if len(values) < required {
-		return snapshot{}, fmt.Errorf(
+		return normalizedSeries{}, fmt.Errorf(
 			"requires at least %d monthly data points, got %d",
 			required,
 			len(values),
@@ -58,7 +70,7 @@ func normalizeSeries(series apiSeries) (snapshot, error) {
 	}
 	for index := 1; index < required; index++ {
 		if values[index-1].ordinal-values[index].ordinal != 1 {
-			return snapshot{}, fmt.Errorf(
+			return normalizedSeries{}, fmt.Errorf(
 				"monthly history from %s-%s must be consecutive before %s-%s",
 				values[0].year,
 				values[0].period,
@@ -70,15 +82,26 @@ func normalizeSeries(series apiSeries) (snapshot, error) {
 
 	previous, actual, err := calculateChanges(Series(seriesID), values)
 	if err != nil {
-		return snapshot{}, err
+		return normalizedSeries{}, err
 	}
 
-	return snapshot{
-		seriesID: seriesID,
-		year:     values[0].year,
-		period:   values[0].period,
-		actual:   actual,
-		previous: previous,
+	history := make([]monthlyHistory, len(values))
+	for index, value := range values {
+		history[index] = monthlyHistory{
+			year:   value.year,
+			period: value.period,
+			value:  value.raw,
+		}
+	}
+	return normalizedSeries{
+		snapshot: snapshot{
+			seriesID: seriesID,
+			year:     values[0].year,
+			period:   values[0].period,
+			actual:   actual,
+			previous: previous,
+		},
+		history: history,
 	}, nil
 }
 
@@ -111,6 +134,7 @@ func normalizeData(data apiData, series Series) (monthlyValue, error) {
 		year:    data.Year,
 		period:  data.Period,
 		ordinal: year*12 + month - 1,
+		raw:     data.Value,
 		value:   value,
 	}, nil
 }
