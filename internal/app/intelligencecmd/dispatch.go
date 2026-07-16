@@ -90,6 +90,7 @@ func Run(
 	case "ingest-bls-observations":
 		return runIngestBLSObservations(
 			ctx,
+			dependencies.Events,
 			dependencies.ObservationAdapter,
 			dependencies.ObservationPersistence,
 			stdout,

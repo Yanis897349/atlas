@@ -22,8 +22,22 @@ func TestRunIngestsBLSObservationsIdempotentlyEndToEnd(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Run(migrate) error = %v", err)
 	}
-	insertBLSObservationEvent(t, database, validBLSCPIEventID, "cpi", "inflation")
-	insertBLSObservationEvent(t, database, validBLSEmploymentEventID, "employment", "employment")
+	insertBLSObservationEvent(
+		t,
+		database,
+		validBLSCPIEventID,
+		"cpi",
+		"Consumer Price Index",
+		"inflation",
+	)
+	insertBLSObservationEvent(
+		t,
+		database,
+		validBLSEmploymentEventID,
+		"employment",
+		"Employment Situation",
+		"employment",
+	)
 
 	var providerCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -126,10 +140,64 @@ ORDER BY economic_event_id
 	assertBLSObservation(t, observations[1], validBLSEmploymentEventID, "CES0000000001:2026-M06", "158900", "159000")
 }
 
+func TestRunRejectsMismatchedBLSObservationEventsBeforeProviderAndPersistence(t *testing.T) {
+	database := postgrestest.Open(t)
+	if err := Run(t.Context(), []string{"migrate"}, Dependencies{
+		Getenv: applicationDatabaseEnv(database.URL),
+	}); err != nil {
+		t.Fatalf("Run(migrate) error = %v", err)
+	}
+	insertBLSObservationEvent(
+		t,
+		database,
+		validBLSCPIEventID,
+		"employment",
+		"Employment Situation",
+		"employment",
+	)
+	insertBLSObservationEvent(
+		t,
+		database,
+		validBLSEmploymentEventID,
+		"cpi",
+		"Consumer Price Index",
+		"inflation",
+	)
+
+	var providerCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		providerCalls.Add(1)
+	}))
+	t.Cleanup(server.Close)
+	stdout := &bytes.Buffer{}
+	err := Run(t.Context(), validBLSObservationArguments(), Dependencies{
+		Getenv: applicationDatabaseEnv(database.URL),
+		BLSObservations: BLSObservationDependencies{
+			HTTPClient: server.Client(),
+			Endpoint:   server.URL,
+		},
+		Stdout: stdout,
+	})
+	if err == nil || !strings.Contains(err.Error(), "after 0 processed observations") ||
+		!strings.Contains(err.Error(), "must be the canonical BLS Consumer Price Index release") {
+		t.Fatalf("Run(ingest-bls-observations) error = %v, want canonical event validation", err)
+	}
+	if providerCalls.Load() != 0 || stdout.Len() != 0 {
+		t.Errorf("provider calls = %d, stdout = %q; want no side effects", providerCalls.Load(), stdout.String())
+	}
+	var count int
+	if err := database.Pool.QueryRow(t.Context(), `SELECT count(*) FROM economic_event_observations`).Scan(&count); err != nil {
+		t.Fatalf("count BLS observations: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("observation count = %d, want no persistence", count)
+	}
+}
+
 func insertBLSObservationEvent(
 	t *testing.T,
 	database postgrestest.Database,
-	id, externalID, eventType string,
+	id, externalID, name, eventType string,
 ) {
 	t.Helper()
 	_, err := database.Pool.Exec(t.Context(), `
@@ -137,10 +205,10 @@ INSERT INTO economic_events (
     id, source, external_event_id, name, region, event_type, scheduled_at,
     source_url, retrieved_at, created_by, updated_by
 )
-VALUES ($1, 'bls', $2, $2, 'united_states', $3, '2026-07-16T12:30:00Z',
+VALUES ($1, 'bls', $2, $3, 'united_states', $4, '2026-07-16T12:30:00Z',
         'https://www.bls.gov/schedule/', '2026-07-16T10:00:00Z',
         'atlas-bls-calendar-ingestion', 'atlas-bls-calendar-ingestion')
-`, id, externalID, eventType)
+`, id, externalID, name, eventType)
 	if err != nil {
 		t.Fatalf("insert BLS economic event: %v", err)
 	}
