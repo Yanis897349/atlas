@@ -46,7 +46,9 @@ func TestRunIngestsBLSObservationsIdempotentlyEndToEnd(t *testing.T) {
 			t.Errorf("request method = %s, want POST", request.Method)
 		}
 		var payload struct {
-			Series []intelligencebls.Series `json:"seriesid"`
+			Series    []intelligencebls.Series `json:"seriesid"`
+			StartYear string                   `json:"startyear"`
+			EndYear   string                   `json:"endyear"`
 		}
 		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
 			t.Errorf("decode BLS request: %v", err)
@@ -57,6 +59,9 @@ func TestRunIngestsBLSObservationsIdempotentlyEndToEnd(t *testing.T) {
 		}
 		if !reflect.DeepEqual(payload.Series, wantSeries) {
 			t.Errorf("request series = %#v, want CPI-then-employment order %#v", payload.Series, wantSeries)
+		}
+		if payload.StartYear != "2024" || payload.EndYear != "2026" {
+			t.Errorf("request years = (%q, %q), want explicit three-calendar-year window", payload.StartYear, payload.EndYear)
 		}
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write([]byte(testBLSObservationResponse))
@@ -136,8 +141,8 @@ ORDER BY economic_event_id
 	if len(observations) != 2 {
 		t.Fatalf("observation count = %d, want 2", len(observations))
 	}
-	assertBLSObservation(t, observations[0], validBLSCPIEventID, "CUUR0000SA0:2026-M06", "320.800", "321.500")
-	assertBLSObservation(t, observations[1], validBLSEmploymentEventID, "CES0000000001:2026-M06", "158900", "159000")
+	assertBLSObservation(t, observations[0], validBLSCPIEventID, "CUUR0000SA0:2026-M06", "3.0%", "3.2%")
+	assertBLSObservation(t, observations[1], validBLSEmploymentEventID, "CES0000000001:2026-M06", "+50", "+100")
 }
 
 func TestRunRejectsMismatchedBLSObservationEventsBeforeProviderAndPersistence(t *testing.T) {
@@ -273,11 +278,24 @@ const (
   "Results": {"series": [
     {"seriesID": "CES0000000001", "data": [
       {"year": "2026", "period": "M06", "periodName": "June", "value": "159000"},
-      {"year": "2026", "period": "M05", "periodName": "May", "value": "158900"}
+      {"year": "2026", "period": "M05", "periodName": "May", "value": "158900"},
+      {"year": "2026", "period": "M04", "periodName": "April", "value": "158850"}
     ]},
     {"seriesID": "CUUR0000SA0", "data": [
       {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
-      {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"}
+      {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"},
+      {"year": "2026", "period": "M04", "periodName": "April", "value": "319.900"},
+      {"year": "2026", "period": "M03", "periodName": "March", "value": "319.000"},
+      {"year": "2026", "period": "M02", "periodName": "February", "value": "318.000"},
+      {"year": "2026", "period": "M01", "periodName": "January", "value": "317.000"},
+      {"year": "2025", "period": "M12", "periodName": "December", "value": "316.500"},
+      {"year": "2025", "period": "M11", "periodName": "November", "value": "316.000"},
+      {"year": "2025", "period": "M10", "periodName": "October", "value": "315.000"},
+      {"year": "2025", "period": "M09", "periodName": "September", "value": "314.000"},
+      {"year": "2025", "period": "M08", "periodName": "August", "value": "313.500"},
+      {"year": "2025", "period": "M07", "periodName": "July", "value": "312.500"},
+      {"year": "2025", "period": "M06", "periodName": "June", "value": "311.500"},
+      {"year": "2025", "period": "M05", "periodName": "May", "value": "311.500"}
     ]}
   ]}
 }`

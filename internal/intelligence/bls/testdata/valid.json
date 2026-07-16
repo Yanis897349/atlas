@@ -9,12 +9,25 @@
         "data": [
           {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
           {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
-          {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"}
+          {"year": "2025", "period": "M05", "periodName": "May", "value": "311.500"},
+          {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"},
+          {"year": "2026", "period": "M04", "periodName": "April", "value": "319.900"},
+          {"year": "2026", "period": "M03", "periodName": "March", "value": "319.000"},
+          {"year": "2026", "period": "M02", "periodName": "February", "value": "318.000"},
+          {"year": "2026", "period": "M01", "periodName": "January", "value": "317.000"},
+          {"year": "2025", "period": "M12", "periodName": "December", "value": "316.500"},
+          {"year": "2025", "period": "M11", "periodName": "November", "value": "316.000"},
+          {"year": "2025", "period": "M10", "periodName": "October", "value": "315.000"},
+          {"year": "2025", "period": "M09", "periodName": "September", "value": "314.000"},
+          {"year": "2025", "period": "M08", "periodName": "August", "value": "313.500"},
+          {"year": "2025", "period": "M07", "periodName": "July", "value": "312.500"},
+          {"year": "2025", "period": "M06", "periodName": "June", "value": "311.500"}
         ]
       },
       {
         "seriesID": "CES0000000001",
         "data": [
+          {"year": "2026", "period": "M04", "periodName": "April", "value": "158850"},
           {"year": "2026", "period": "M06", "periodName": "June", "value": "159000"},
           {"year": "2026", "period": "M05", "periodName": "May", "value": "158900"}
         ]
@@ -23,7 +36,19 @@
         "seriesID": "CUUR0000SA0",
         "data": [
           {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
-          {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"}
+          {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"},
+          {"year": "2026", "period": "M04", "periodName": "April", "value": "319.900"},
+          {"year": "2026", "period": "M03", "periodName": "March", "value": "319.000"},
+          {"year": "2026", "period": "M02", "periodName": "February", "value": "318.000"},
+          {"year": "2026", "period": "M01", "periodName": "January", "value": "317.000"},
+          {"year": "2025", "period": "M12", "periodName": "December", "value": "316.500"},
+          {"year": "2025", "period": "M11", "periodName": "November", "value": "316.000"},
+          {"year": "2025", "period": "M10", "periodName": "October", "value": "315.000"},
+          {"year": "2025", "period": "M09", "periodName": "September", "value": "314.000"},
+          {"year": "2025", "period": "M08", "periodName": "August", "value": "313.500"},
+          {"year": "2025", "period": "M07", "periodName": "July", "value": "312.500"},
+          {"year": "2025", "period": "M06", "periodName": "June", "value": "311.500"},
+          {"year": "2025", "period": "M05", "periodName": "May", "value": "311.500"}
         ]
       }
     ]

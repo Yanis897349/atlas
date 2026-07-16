@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 const (
@@ -18,9 +19,15 @@ const (
 
 type apiRequest struct {
 	SeriesIDs []Series `json:"seriesid"`
+	StartYear string   `json:"startyear"`
+	EndYear   string   `json:"endyear"`
 }
 
-func (adapter *Adapter) fetch(ctx context.Context, targets []Target) ([]byte, error) {
+func (adapter *Adapter) fetch(
+	ctx context.Context,
+	targets []Target,
+	startYear, endYear int,
+) ([]byte, error) {
 	requestContext, cancel := context.WithTimeout(ctx, adapter.requestBudget)
 	defer cancel()
 	if err := requestContext.Err(); err != nil {
@@ -31,7 +38,11 @@ func (adapter *Adapter) fetch(ctx context.Context, targets []Target) ([]byte, er
 	for index, target := range targets {
 		seriesIDs[index] = target.Series
 	}
-	requestBody, err := json.Marshal(apiRequest{SeriesIDs: seriesIDs})
+	requestBody, err := json.Marshal(apiRequest{
+		SeriesIDs: seriesIDs,
+		StartYear: strconv.Itoa(startYear),
+		EndYear:   strconv.Itoa(endYear),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("encode BLS API request: %w", err)
 	}

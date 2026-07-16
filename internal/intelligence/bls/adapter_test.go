@@ -42,12 +42,17 @@ func TestAdapterFetchObservationsNormalizesSupportedSeries(t *testing.T) {
 			t.Errorf("User-Agent = %q, want Atlas project identity", got)
 		}
 		var payload struct {
-			Series []bls.Series `json:"seriesid"`
+			Series    []bls.Series `json:"seriesid"`
+			StartYear string       `json:"startyear"`
+			EndYear   string       `json:"endyear"`
 		}
 		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
 		requestSeries = payload.Series
+		if payload.StartYear != "2024" || payload.EndYear != "2026" {
+			t.Errorf("request years = (%q, %q), want explicit three-calendar-year window", payload.StartYear, payload.EndYear)
+		}
 		response.Header().Set("Content-Type", "application/json")
 		_, _ = response.Write(body)
 	}))
@@ -80,8 +85,8 @@ func TestAdapterFetchObservationsNormalizesSupportedSeries(t *testing.T) {
 		SourceObservationID: "CES0000000001:2026-M06",
 		SourceURL:           "https://data.bls.gov/timeseries/CES0000000001",
 		ObservedAt:          observedAt.UTC(),
-		Previous:            stringPointer("158900"),
-		Actual:              stringPointer("159000"),
+		Previous:            stringPointer("+50"),
+		Actual:              stringPointer("+100"),
 	})
 	assertObservation(t, observations[1], intelligence.Observation{
 		EconomicEventID:     cpiEventID,
@@ -89,17 +94,16 @@ func TestAdapterFetchObservationsNormalizesSupportedSeries(t *testing.T) {
 		SourceObservationID: "CUUR0000SA0:2026-M06",
 		SourceURL:           "https://data.bls.gov/timeseries/CUUR0000SA0",
 		ObservedAt:          observedAt.UTC(),
-		Previous:            stringPointer("320.800"),
-		Actual:              stringPointer("321.500"),
+		Previous:            stringPointer("3.0%"),
+		Actual:              stringPointer("3.2%"),
 	})
 }
 
 func TestAdapterFetchObservationsAppliesLimitAfterTargetDeduplication(t *testing.T) {
-	client := &recordingClient{response: jsonResponse(`{
-		"status":"REQUEST_SUCCEEDED","message":[],"Results":{"series":[{
-			"seriesID":"CUUR0000SA0","data":[{"year":"2026","period":"M06","value":"321.500"}]
-		}]}}
-	`)}
+	client := &recordingClient{response: jsonResponse(successfulSeries(
+		"CUUR0000SA0",
+		validCPIHistory(nil, ""),
+	))}
 	adapter := newAdapter(t, bls.Config{
 		Targets: []bls.Target{
 			{EconomicEventID: cpiEventID, Series: bls.SeriesCPIAllItemsNSA},
@@ -113,8 +117,10 @@ func TestAdapterFetchObservationsAppliesLimitAfterTargetDeduplication(t *testing
 	if err != nil {
 		t.Fatalf("FetchObservations() error = %v", err)
 	}
-	if len(observations) != 1 || observations[0].EconomicEventID != cpiEventID || observations[0].Previous != nil {
-		t.Fatalf("FetchObservations() = %#v, want one CPI observation without previous value", observations)
+	if len(observations) != 1 || observations[0].EconomicEventID != cpiEventID ||
+		observations[0].Previous == nil || *observations[0].Previous != "3.0%" ||
+		observations[0].Actual == nil || *observations[0].Actual != "3.2%" {
+		t.Fatalf("FetchObservations() = %#v, want one calculated CPI observation", observations)
 	}
 	if !bytes.Contains(client.requestBody, []byte(`"seriesid":["CUUR0000SA0"]`)) {
 		t.Errorf("request body = %s, want one deduplicated CPI series", client.requestBody)
@@ -186,8 +192,14 @@ func TestAdapterFetchObservationsRejectsInvalidResponses(t *testing.T) {
 		{name: "invalid year", body: successfulSeries("CUUR0000SA0", `{"year":"26","period":"M06","value":"1"}`), contains: "year must contain four digits"},
 		{name: "invalid period", body: successfulSeries("CUUR0000SA0", `{"year":"2026","period":"M13","value":"1"}`), contains: "period must be between"},
 		{name: "blank value", body: successfulSeries("CUUR0000SA0", `{"year":"2026","period":"M06","value":" "}`), contains: "value must not be blank"},
+		{name: "invalid decimal", body: successfulSeries("CUUR0000SA0", cpiHistory(map[string]string{"2026-M06": "not-a-number"}, "")), contains: "value must be a decimal"},
+		{name: "insufficient CPI history", body: successfulSeries("CUUR0000SA0", validData("1")), contains: "requires at least 14"},
+		{name: "gapped CPI history", body: successfulSeries("CUUR0000SA0", cpiHistory(nil, "2026-M04")+`,`+monthlyData("2025", "M04", "310.000")), contains: "must be consecutive"},
+		{name: "non-positive CPI comparison", body: successfulSeries("CUUR0000SA0", cpiHistory(map[string]string{"2025-M06": "0"}, "")), contains: "CPI comparison value must be positive"},
+		{name: "insufficient payroll history", body: successfulSeries("CES0000000001", monthlyData("2026", "M06", "159000")), targets: []bls.Target{{EconomicEventID: employmentEventID, Series: bls.SeriesTotalNonfarmPayrollSA}}, contains: "requires at least 3"},
+		{name: "fractional payroll", body: successfulSeries("CES0000000001", payrollHistory(map[string]string{"2026-M05": "158900.5"}, "")), targets: []bls.Target{{EconomicEventID: employmentEventID, Series: bls.SeriesTotalNonfarmPayrollSA}}, contains: "payroll value must be an integer"},
 		{name: "conflicting period", body: successfulSeries("CUUR0000SA0", validData("1")+`,`+validData("2")), contains: "conflicting values"},
-		{name: "conflicting repeated series", body: `{"status":"REQUEST_SUCCEEDED","Results":{"series":[` + seriesJSON("CUUR0000SA0", validData("1")) + `,` + seriesJSON("CUUR0000SA0", validData("2")) + `]}}`, contains: "conflicting series"},
+		{name: "conflicting repeated series", body: `{"status":"REQUEST_SUCCEEDED","Results":{"series":[` + seriesJSON("CUUR0000SA0", validCPIHistory(nil, "")) + `,` + seriesJSON("CUUR0000SA0", cpiHistory(map[string]string{"2026-M06": "322.500"}, "")) + `]}}`, contains: "conflicting series"},
 	}
 
 	for _, test := range tests {
@@ -317,6 +329,69 @@ func seriesJSON(seriesID, data string) string {
 
 func validData(value string) string {
 	return fmt.Sprintf(`{"year":"2026","period":"M06","value":%q}`, value)
+}
+
+func validCPIHistory(overrides map[string]string, omitted string) string {
+	return cpiHistory(overrides, omitted)
+}
+
+func cpiHistory(overrides map[string]string, omitted string) string {
+	points := []struct {
+		year, period, value string
+	}{
+		{"2026", "M06", "321.500"},
+		{"2026", "M05", "320.800"},
+		{"2026", "M04", "319.900"},
+		{"2026", "M03", "319.000"},
+		{"2026", "M02", "318.000"},
+		{"2026", "M01", "317.000"},
+		{"2025", "M12", "316.500"},
+		{"2025", "M11", "316.000"},
+		{"2025", "M10", "315.000"},
+		{"2025", "M09", "314.000"},
+		{"2025", "M08", "313.500"},
+		{"2025", "M07", "312.500"},
+		{"2025", "M06", "311.500"},
+		{"2025", "M05", "311.500"},
+	}
+	return historyJSON(points, overrides, omitted)
+}
+
+func payrollHistory(overrides map[string]string, omitted string) string {
+	points := []struct {
+		year, period, value string
+	}{
+		{"2026", "M06", "159000"},
+		{"2026", "M05", "158900"},
+		{"2026", "M04", "158850"},
+	}
+	return historyJSON(points, overrides, omitted)
+}
+
+func historyJSON(
+	points []struct {
+		year, period, value string
+	},
+	overrides map[string]string,
+	omitted string,
+) string {
+	data := make([]string, 0, len(points))
+	for _, point := range points {
+		identity := point.year + "-" + point.period
+		if identity == omitted {
+			continue
+		}
+		value := point.value
+		if override, exists := overrides[identity]; exists {
+			value = override
+		}
+		data = append(data, monthlyData(point.year, point.period, value))
+	}
+	return strings.Join(data, ",")
+}
+
+func monthlyData(year, period, value string) string {
+	return fmt.Sprintf(`{"year":%q,"period":%q,"value":%q}`, year, period, value)
 }
 
 type recordingClient struct {

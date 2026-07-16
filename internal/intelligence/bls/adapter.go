@@ -37,11 +37,12 @@ func (adapter *Adapter) FetchObservations(
 
 	count := min(limit, len(adapter.targets))
 	targets := adapter.targets[:count]
-	body, err := adapter.fetch(ctx, targets)
+	observedAt := adapter.now().UTC()
+	body, err := adapter.fetch(ctx, targets, observedAt.Year()-2, observedAt.Year())
 	if err != nil {
 		return nil, err
 	}
-	observations, err := normalizeResponse(body, targets, adapter.now().UTC())
+	observations, err := normalizeResponse(body, targets, observedAt)
 	if err != nil {
 		return nil, fmt.Errorf("normalize BLS observations: %w", err)
 	}

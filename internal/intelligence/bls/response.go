@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
@@ -40,7 +39,7 @@ type snapshot struct {
 	year     string
 	period   string
 	actual   string
-	previous *string
+	previous string
 }
 
 func normalizeResponse(
@@ -89,77 +88,18 @@ func normalizeResponse(
 			return nil, fmt.Errorf("BLS API response is missing requested series %q", target.Series)
 		}
 		actual := snapshot.actual
+		previous := snapshot.previous
 		observations = append(observations, intelligence.Observation{
 			EconomicEventID:     target.EconomicEventID,
 			Source:              Source,
 			SourceObservationID: snapshot.seriesID + ":" + snapshot.year + "-" + snapshot.period,
 			SourceURL:           "https://data.bls.gov/timeseries/" + snapshot.seriesID,
 			ObservedAt:          observedAt,
-			Previous:            snapshot.previous,
+			Previous:            &previous,
 			Actual:              &actual,
 		})
 	}
 	return observations, nil
-}
-
-func normalizeSeries(series apiSeries) (snapshot, error) {
-	seriesID := strings.TrimSpace(series.SeriesID)
-	if seriesID == "" {
-		return snapshot{}, errors.New("series ID is required")
-	}
-
-	values := make([]apiData, 0, len(series.Data))
-	seen := make(map[string]string, len(series.Data))
-	for index, data := range series.Data {
-		if err := validateData(data); err != nil {
-			return snapshot{}, fmt.Errorf("data point %d: %w", index+1, err)
-		}
-		identity := data.Year + "-" + data.Period
-		if value, exists := seen[identity]; exists {
-			if value != data.Value {
-				return snapshot{}, fmt.Errorf("period %q has conflicting values", identity)
-			}
-			continue
-		}
-		seen[identity] = data.Value
-		values = append(values, data)
-	}
-	if len(values) == 0 {
-		return snapshot{}, errors.New("at least one monthly data point is required")
-	}
-
-	result := snapshot{
-		seriesID: seriesID,
-		year:     values[0].Year,
-		period:   values[0].Period,
-		actual:   values[0].Value,
-	}
-	if len(values) > 1 {
-		previous := values[1].Value
-		result.previous = &previous
-	}
-	return result, nil
-}
-
-func validateData(data apiData) error {
-	if len(data.Year) != 4 {
-		return errors.New("year must contain four digits")
-	}
-	year, err := strconv.Atoi(data.Year)
-	if err != nil || year < 1000 {
-		return errors.New("year must contain four digits")
-	}
-	if len(data.Period) != 3 || data.Period[0] != 'M' {
-		return errors.New("period must be between M01 and M12")
-	}
-	month, err := strconv.Atoi(data.Period[1:])
-	if err != nil || month < 1 || month > 12 {
-		return errors.New("period must be between M01 and M12")
-	}
-	if strings.TrimSpace(data.Value) == "" {
-		return errors.New("value must not be blank")
-	}
-	return nil
 }
 
 func providerStatusError(status string, messages []string) error {
