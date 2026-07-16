@@ -16,6 +16,8 @@ import (
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
+	"github.com/Yanis897349/atlas/internal/intelligence"
+	intelligencebls "github.com/Yanis897349/atlas/internal/intelligence/bls"
 	openaiapi "github.com/Yanis897349/atlas/internal/openai"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 	watchlistpostgres "github.com/Yanis897349/atlas/internal/watchlist/postgres"
@@ -26,6 +28,14 @@ import (
 type CalendarSourceDependencies struct {
 	HTTPClient    sourcehttp.Client
 	CalendarURL   string
+	Now           func() time.Time
+	RequestBudget time.Duration
+}
+
+// BLSObservationDependencies contains deterministic seams for official BLS observations.
+type BLSObservationDependencies struct {
+	HTTPClient    intelligencebls.HTTPClient
+	Endpoint      string
 	Now           func() time.Time
 	RequestBudget time.Duration
 }
@@ -47,6 +57,7 @@ type Dependencies struct {
 	Eurostat                      CalendarSourceDependencies
 	Fed                           CalendarSourceDependencies
 	SPGlobal                      CalendarSourceDependencies
+	BLSObservations               BLSObservationDependencies
 	OpenAIHTTPClient              OpenAIHTTPClient
 	OpenAIEndpoint                string
 	OpenAIRequestBudget           time.Duration
@@ -78,8 +89,29 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			return err
 		}
 	}
+	var observationAdapter intelligence.ObservationAdapter
+	if parsedCommand.intelligenceCommand != nil {
+		cpiEventID, employmentEventID, required := parsedCommand.intelligenceCommand.BLSObservationEventIDs()
+		if required {
+			observationAdapter, err = intelligencebls.NewAdapter(intelligencebls.Config{
+				Targets: []intelligencebls.Target{
+					{EconomicEventID: cpiEventID, Series: intelligencebls.SeriesCPIAllItemsNSA},
+					{EconomicEventID: employmentEventID, Series: intelligencebls.SeriesTotalNonfarmPayrollSA},
+				},
+				Endpoint:      dependencies.BLSObservations.Endpoint,
+				Client:        dependencies.BLSObservations.HTTPClient,
+				Now:           dependencies.BLSObservations.Now,
+				RequestBudget: dependencies.BLSObservations.RequestBudget,
+			})
+			if err != nil {
+				return fmt.Errorf("configure BLS economic event observations: %w", err)
+			}
+		}
+	}
+	requiresIntelligenceEmbedder := parsedCommand.intelligenceCommand != nil &&
+		parsedCommand.intelligenceCommand.RequiresSourceRecordEmbedder()
 	sourceRecordEmbedder, err := configuredSourceRecordEmbedder(
-		parsedCommand.searchCommand != nil || parsedCommand.intelligenceCommand != nil || parsedCommand.name == "ingest-rss",
+		parsedCommand.searchCommand != nil || requiresIntelligenceEmbedder || parsedCommand.name == "ingest-rss",
 		getenv,
 		dependencies,
 	)
@@ -110,7 +142,14 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 		)
 	}
 	if parsedCommand.intelligenceCommand != nil {
-		return runIntelligenceCommand(ctx, pool, sourceRecordEmbedder, stdout, *parsedCommand.intelligenceCommand)
+		return runIntelligenceCommand(
+			ctx,
+			pool,
+			observationAdapter,
+			sourceRecordEmbedder,
+			stdout,
+			*parsedCommand.intelligenceCommand,
+		)
 	}
 	if parsedCommand.watchlistCommand != nil {
 		repository, err := watchlistpostgres.NewRepository(pool)

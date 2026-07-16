@@ -22,10 +22,11 @@ func TestParseEconomicEventContextNormalizesInput(t *testing.T) {
 	wantStart := time.Date(2026, time.July, 12, 8, 0, 0, 0, time.UTC)
 	wantEnd := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
 	if command.name != "economic-event-context" ||
-		command.query.EventID != "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" ||
-		command.query.PublicationWindowStart != wantStart || command.query.PublicationWindowEnd != wantEnd ||
-		command.query.SourceRecordLimit != 24 ||
-		command.query.ObservationLimit != 17 {
+		command.eventContextQuery.EventID != "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" ||
+		command.eventContextQuery.PublicationWindowStart != wantStart ||
+		command.eventContextQuery.PublicationWindowEnd != wantEnd ||
+		command.eventContextQuery.SourceRecordLimit != 24 ||
+		command.eventContextQuery.ObservationLimit != 17 {
 		t.Errorf("command = %#v, want normalized complete query", command)
 	}
 }
