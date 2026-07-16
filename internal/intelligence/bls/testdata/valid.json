@@ -1,0 +1,31 @@
+{
+  "status": "REQUEST_SUCCEEDED",
+  "responseTime": 31,
+  "message": [],
+  "Results": {
+    "series": [
+      {
+        "seriesID": "CUUR0000SA0",
+        "data": [
+          {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
+          {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
+          {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"}
+        ]
+      },
+      {
+        "seriesID": "CES0000000001",
+        "data": [
+          {"year": "2026", "period": "M06", "periodName": "June", "value": "159000"},
+          {"year": "2026", "period": "M05", "periodName": "May", "value": "158900"}
+        ]
+      },
+      {
+        "seriesID": "CUUR0000SA0",
+        "data": [
+          {"year": "2026", "period": "M06", "periodName": "June", "value": "321.500"},
+          {"year": "2026", "period": "M05", "periodName": "May", "value": "320.800"}
+        ]
+      }
+    ]
+  }
+}
