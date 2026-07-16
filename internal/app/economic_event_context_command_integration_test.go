@@ -55,20 +55,61 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertEvent() error = %v", err)
 	}
+	emptyEvent, err := eventRepository.UpsertEvent(t.Context(), calendar.Event{
+		Source:          "official-calendar",
+		ExternalEventID: "cpi-empty-2026-07",
+		Name:            event.Name,
+		Region:          calendar.RegionUnitedStates,
+		Type:            calendar.EventTypeInflation,
+		ScheduledAt:     windowEnd.Add(48 * time.Hour),
+		SourceURL:       "https://example.com/calendar/cpi-empty-2026-07",
+		RetrievedAt:     windowStart.Add(-time.Hour),
+	}, "calendar-ingestion")
+	if err != nil {
+		t.Fatalf("UpsertEvent(empty) error = %v", err)
+	}
 	observationRepository, err := intelligencepostgres.NewRepository(database.Pool)
 	if err != nil {
 		t.Fatalf("NewRepository(observations) error = %v", err)
 	}
-	actual := "3.3%"
-	if _, err := observationRepository.UpsertObservation(t.Context(), intelligence.Observation{
-		EconomicEventID:     event.ID,
-		Source:              "official-statistics",
-		SourceObservationID: "cpi-2026-07",
-		SourceURL:           "https://example.com/releases/cpi-2026-07",
-		ObservedAt:          windowEnd.Add(time.Hour),
-		Actual:              &actual,
-	}, "observation-ingestion"); err != nil {
-		t.Fatalf("UpsertObservation() error = %v", err)
+	consensus, previous, actual := "3.1%", "3.0%", "3.3%"
+	observationFixtures := []intelligence.Observation{
+		{
+			EconomicEventID:     event.ID,
+			Source:              "oldest-statistics",
+			SourceObservationID: "cpi-oldest-2026-07",
+			SourceURL:           "https://example.com/releases/cpi-oldest-2026-07",
+			ObservedAt:          windowEnd.Add(time.Hour),
+			Consensus:           &consensus,
+		},
+		{
+			EconomicEventID:     event.ID,
+			Source:              "official-statistics",
+			SourceObservationID: "cpi-2026-07",
+			SourceURL:           "https://example.com/releases/cpi-2026-07",
+			ObservedAt:          windowEnd.Add(2 * time.Hour),
+			Consensus:           &consensus,
+			Previous:            &previous,
+			Actual:              &actual,
+		},
+		{
+			EconomicEventID:     event.ID,
+			Source:              "latest-statistics",
+			SourceObservationID: "cpi-latest-2026-07",
+			SourceURL:           "https://example.com/releases/cpi-latest-2026-07",
+			ObservedAt:          windowEnd.Add(3 * time.Hour),
+			Previous:            &previous,
+		},
+	}
+	storedObservations := make(map[string]intelligence.StoredObservation, len(observationFixtures))
+	for _, fixture := range observationFixtures {
+		stored, persistErr := observationRepository.UpsertObservation(
+			t.Context(), fixture, "observation-ingestion",
+		)
+		if persistErr != nil {
+			t.Fatalf("UpsertObservation(%q) error = %v", fixture.SourceObservationID, persistErr)
+		}
+		storedObservations[fixture.SourceObservationID] = stored
 	}
 
 	sourceRepository, err := ingestionpostgres.NewRepository(database.Pool)
@@ -169,6 +210,7 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		"--from", windowStart.Format(time.RFC3339Nano),
 		"--to", windowEnd.Format(time.RFC3339Nano),
 		"--limit", "4",
+		"--observation-limit", "2",
 	}
 	if err := Run(t.Context(), arguments, dependencies); err != nil {
 		t.Fatalf("Run(economic-event-context) error = %v", err)
@@ -181,8 +223,8 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &outputFields); err != nil {
 		t.Fatalf("decode command output fields: %v", err)
 	}
-	if _, exists := outputFields["observations"]; exists || len(outputFields) != 4 {
-		t.Errorf("command output fields = %v, want unchanged schema without observations", outputFields)
+	if _, exists := outputFields["observations"]; !exists || len(outputFields) != 5 {
+		t.Errorf("command output fields = %v, want schema with observations", outputFields)
 	}
 	if output.Event.ID != event.ID || output.Event.Source != event.Source ||
 		output.Event.ExternalEventID != event.ExternalEventID || output.Event.Name != event.Name ||
@@ -195,6 +237,29 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if output.PublicationWindowStart != windowStart.Format(time.RFC3339Nano) ||
 		output.PublicationWindowEnd != windowEnd.Format(time.RFC3339Nano) {
 		t.Errorf("publication window = (%q, %q), want normalized inclusive bounds", output.PublicationWindowStart, output.PublicationWindowEnd)
+	}
+	wantObservationIDs := []string{
+		storedObservations["cpi-latest-2026-07"].ID,
+		storedObservations["cpi-2026-07"].ID,
+	}
+	if len(output.Observations) != len(wantObservationIDs) {
+		t.Fatalf("observations = %#v, want two bounded observations", output.Observations)
+	}
+	for index, wantID := range wantObservationIDs {
+		got := output.Observations[index]
+		if got.ID != wantID || got.EconomicEventID != event.ID || got.Source == "" ||
+			got.SourceObservationID == "" || got.SourceURL == "" || got.ObservedAt == "" ||
+			got.CreatedAt == "" || got.UpdatedAt == "" || got.CreatedBy != "observation-ingestion" ||
+			got.UpdatedBy != "observation-ingestion" {
+			t.Errorf("observations[%d] = %#v, want complete canonical observation %q", index, got, wantID)
+		}
+	}
+	if output.Observations[0].Consensus != nil || output.Observations[0].Actual != nil ||
+		output.Observations[0].Previous == nil || *output.Observations[0].Previous != previous ||
+		output.Observations[1].Consensus == nil || *output.Observations[1].Consensus != consensus ||
+		output.Observations[1].Previous == nil || *output.Observations[1].Previous != previous ||
+		output.Observations[1].Actual == nil || *output.Observations[1].Actual != actual {
+		t.Errorf("observation values = %#v, want exact nullable values", output.Observations)
 	}
 	exact := []ingestion.StoredSourceRecord{records["start"], records["middle-a"]}
 	sort.Slice(exact, func(left, right int) bool { return exact[left].ID < exact[right].ID })
@@ -224,6 +289,7 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 
 	stdout.Reset()
 	env["ATLAS_OPENAI_EMBEDDING_MODEL"] = "unindexed-model"
+	arguments[2] = emptyEvent.ID
 	if err := Run(t.Context(), arguments, dependencies); err != nil {
 		t.Fatalf("Run(economic-event-context empty) error = %v", err)
 	}
@@ -231,8 +297,9 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("decode empty command output: %v", err)
 	}
-	if output.SourceRecords == nil || len(output.SourceRecords) != 0 || providerCalls.Load() != 2 {
-		t.Errorf("empty source records = %#v with %d calls, want [] after second embedding", output.SourceRecords, providerCalls.Load())
+	if output.Observations == nil || len(output.Observations) != 0 ||
+		output.SourceRecords == nil || len(output.SourceRecords) != 0 || providerCalls.Load() != 2 {
+		t.Errorf("empty arrays = (%#v, %#v) with %d calls, want [] after second embedding", output.Observations, output.SourceRecords, providerCalls.Load())
 	}
 
 	stdout.Reset()
@@ -261,7 +328,22 @@ type economicEventContextIntegrationOutput struct {
 	} `json:"event"`
 	PublicationWindowStart string `json:"publication_window_start"`
 	PublicationWindowEnd   string `json:"publication_window_end"`
-	SourceRecords          []struct {
+	Observations           []struct {
+		ID                  string  `json:"id"`
+		EconomicEventID     string  `json:"economic_event_id"`
+		Source              string  `json:"source"`
+		SourceObservationID string  `json:"source_observation_id"`
+		SourceURL           string  `json:"source_url"`
+		ObservedAt          string  `json:"observed_at"`
+		Consensus           *string `json:"consensus"`
+		Previous            *string `json:"previous"`
+		Actual              *string `json:"actual"`
+		CreatedAt           string  `json:"created_at"`
+		UpdatedAt           string  `json:"updated_at"`
+		CreatedBy           string  `json:"created_by"`
+		UpdatedBy           string  `json:"updated_by"`
+	} `json:"observations"`
+	SourceRecords []struct {
 		ID             string  `json:"id"`
 		Source         string  `json:"source"`
 		SourceItemID   string  `json:"source_item_id"`

@@ -13,10 +13,27 @@ import (
 )
 
 type economicEventContextOutput struct {
-	Event                  economicEventOutput         `json:"event"`
-	PublicationWindowStart string                      `json:"publication_window_start"`
-	PublicationWindowEnd   string                      `json:"publication_window_end"`
-	SourceRecords          []economicEventSourceOutput `json:"source_records"`
+	Event                  economicEventOutput              `json:"event"`
+	PublicationWindowStart string                           `json:"publication_window_start"`
+	PublicationWindowEnd   string                           `json:"publication_window_end"`
+	Observations           []economicEventObservationOutput `json:"observations"`
+	SourceRecords          []economicEventSourceOutput      `json:"source_records"`
+}
+
+type economicEventObservationOutput struct {
+	ID                  string  `json:"id"`
+	EconomicEventID     string  `json:"economic_event_id"`
+	Source              string  `json:"source"`
+	SourceObservationID string  `json:"source_observation_id"`
+	SourceURL           string  `json:"source_url"`
+	ObservedAt          string  `json:"observed_at"`
+	Consensus           *string `json:"consensus"`
+	Previous            *string `json:"previous"`
+	Actual              *string `json:"actual"`
+	CreatedAt           string  `json:"created_at"`
+	UpdatedAt           string  `json:"updated_at"`
+	CreatedBy           string  `json:"created_by"`
+	UpdatedBy           string  `json:"updated_by"`
 }
 
 type economicEventOutput struct {
@@ -77,7 +94,25 @@ func runEconomicEventContext(
 		Event:                  newEconomicEventOutput(assembled.Event),
 		PublicationWindowStart: output.FormatTime(assembled.PublicationWindowStart),
 		PublicationWindowEnd:   output.FormatTime(assembled.PublicationWindowEnd),
+		Observations:           make([]economicEventObservationOutput, 0, len(assembled.Observations)),
 		SourceRecords:          make([]economicEventSourceOutput, 0, len(assembled.SourceRecords)),
+	}
+	for _, observation := range assembled.Observations {
+		result.Observations = append(result.Observations, economicEventObservationOutput{
+			ID:                  observation.ID,
+			EconomicEventID:     observation.EconomicEventID,
+			Source:              observation.Source,
+			SourceObservationID: observation.SourceObservationID,
+			SourceURL:           observation.SourceURL,
+			ObservedAt:          output.FormatTime(observation.ObservedAt),
+			Consensus:           observation.Consensus,
+			Previous:            observation.Previous,
+			Actual:              observation.Actual,
+			CreatedAt:           output.FormatTime(observation.CreatedAt),
+			UpdatedAt:           output.FormatTime(observation.UpdatedAt),
+			CreatedBy:           observation.CreatedBy,
+			UpdatedBy:           observation.UpdatedBy,
+		})
 	}
 	for _, match := range assembled.SourceRecords {
 		record := match.SourceRecord

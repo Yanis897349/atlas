@@ -14,6 +14,7 @@ func TestParseEconomicEventContextNormalizesInput(t *testing.T) {
 		"--to", "2026-07-12T14:00:00+02:00",
 		"--event-id", "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
 		"--from", "2026-07-12T08:00:00Z",
+		"--observation-limit", "17",
 	})
 	if err != nil || !recognized {
 		t.Fatalf("Parse() = (%#v, %t, %v), want recognized command", command, recognized, err)
@@ -24,7 +25,7 @@ func TestParseEconomicEventContextNormalizesInput(t *testing.T) {
 		command.query.EventID != "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" ||
 		command.query.PublicationWindowStart != wantStart || command.query.PublicationWindowEnd != wantEnd ||
 		command.query.SourceRecordLimit != 24 ||
-		command.query.ObservationLimit != 100 {
+		command.query.ObservationLimit != 17 {
 		t.Errorf("command = %#v, want normalized complete query", command)
 	}
 }
@@ -47,6 +48,7 @@ func TestParseRejectsInvalidEconomicEventContextArguments(t *testing.T) {
 		{name: "missing from", arguments: withoutFlag(valid, "--from"), contains: "--from is required"},
 		{name: "missing to", arguments: withoutFlag(valid, "--to"), contains: "--to is required"},
 		{name: "missing limit", arguments: withoutFlag(valid, "--limit"), contains: "--limit is required"},
+		{name: "missing observation limit", arguments: withoutFlag(valid, "--observation-limit"), contains: "--observation-limit is required"},
 		{name: "malformed event ID", arguments: replaceFlag(valid, "--event-id", "not-a-uuid"), contains: "--event-id must be a UUID"},
 		{name: "invalid event ID separators", arguments: replaceFlag(valid, "--event-id", "00000000X0000X0000X0000X000000000085"), contains: "--event-id must be a UUID"},
 		{name: "malformed from", arguments: replaceFlag(valid, "--from", "today"), contains: "--from must be RFC3339"},
@@ -57,10 +59,15 @@ func TestParseRejectsInvalidEconomicEventContextArguments(t *testing.T) {
 		{name: "nonnumeric limit", arguments: replaceFlag(valid, "--limit", "many"), contains: "--limit must be between 1 and 100"},
 		{name: "zero limit", arguments: replaceFlag(valid, "--limit", "0"), contains: "--limit must be between 1 and 100"},
 		{name: "high limit", arguments: replaceFlag(valid, "--limit", "101"), contains: "--limit must be between 1 and 100"},
+		{name: "nonnumeric observation limit", arguments: replaceFlag(valid, "--observation-limit", "many"), contains: "--observation-limit must be between 1 and 100"},
+		{name: "zero observation limit", arguments: replaceFlag(valid, "--observation-limit", "0"), contains: "--observation-limit must be between 1 and 100"},
+		{name: "negative observation limit", arguments: replaceFlag(valid, "--observation-limit", "-1"), contains: "--observation-limit must be between 1 and 100"},
+		{name: "high observation limit", arguments: replaceFlag(valid, "--observation-limit", "101"), contains: "--observation-limit must be between 1 and 100"},
 		{name: "repeated event ID", arguments: append(valid, "--event-id", validEventID), contains: "must only be provided once"},
 		{name: "repeated from", arguments: append(valid, "--from", "2026-07-12T09:00:00Z"), contains: "must only be provided once"},
 		{name: "repeated to", arguments: append(valid, "--to", "2026-07-12T13:00:00Z"), contains: "must only be provided once"},
 		{name: "repeated limit", arguments: append(valid, "--limit", "2"), contains: "must only be provided once"},
+		{name: "repeated observation limit", arguments: append(valid, "--observation-limit", "2"), contains: "must only be provided once"},
 		{name: "unknown flag", arguments: append(valid, "--format", "yaml"), contains: "flag provided but not defined"},
 		{name: "positional argument", arguments: append(valid, "extra"), contains: "unexpected positional arguments"},
 	}
@@ -94,6 +101,7 @@ func validEconomicEventContextArguments() []string {
 		"--from", "2026-07-12T08:00:00Z",
 		"--to", "2026-07-12T12:00:00Z",
 		"--limit", "10",
+		"--observation-limit", "10",
 	}
 }
 

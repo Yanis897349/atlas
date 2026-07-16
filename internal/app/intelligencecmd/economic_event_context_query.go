@@ -12,16 +12,17 @@ import (
 	atlasuuid "github.com/Yanis897349/atlas/internal/uuid"
 )
 
-const economicEventContextUsage = "usage: atlas economic-event-context --event-id <UUID> --from <RFC3339> --to <RFC3339> --limit <1-100>"
+const economicEventContextUsage = "usage: atlas economic-event-context --event-id <UUID> --from <RFC3339> --to <RFC3339> --limit <1-100> --observation-limit <1-100>"
 
 func parseEconomicEventContextQuery(arguments []string) (intelligence.EventContextQuery, error) {
 	flags := flag.NewFlagSet("economic-event-context", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	var eventID, from, to, limitValue singleString
+	var eventID, from, to, limitValue, observationLimitValue singleString
 	flags.Var(&eventID, "event-id", "economic event UUID")
 	flags.Var(&from, "from", "inclusive publication window start")
 	flags.Var(&to, "to", "inclusive publication window end")
 	flags.Var(&limitValue, "limit", "maximum source-record count")
+	flags.Var(&observationLimitValue, "observation-limit", "maximum economic-event observation count")
 	if err := flags.Parse(arguments); err != nil {
 		return intelligence.EventContextQuery{}, invalidEconomicEventContextArguments(err)
 	}
@@ -39,6 +40,7 @@ func parseEconomicEventContextQuery(arguments []string) (intelligence.EventConte
 		{name: "from", value: from},
 		{name: "to", value: to},
 		{name: "limit", value: limitValue},
+		{name: "observation-limit", value: observationLimitValue},
 	} {
 		if !required.value.provided {
 			return intelligence.EventContextQuery{}, invalidEconomicEventContextArguments(
@@ -72,13 +74,19 @@ func parseEconomicEventContextQuery(arguments []string) (intelligence.EventConte
 			"--limit must be between 1 and %d", search.MaxSimilarSourceRecordsLimit,
 		))
 	}
+	observationLimit, err := strconv.Atoi(observationLimitValue.value)
+	if err != nil || observationLimit < 1 || observationLimit > intelligence.MaxEventObservationsLimit {
+		return intelligence.EventContextQuery{}, invalidEconomicEventContextArguments(fmt.Errorf(
+			"--observation-limit must be between 1 and %d", intelligence.MaxEventObservationsLimit,
+		))
+	}
 
 	return intelligence.EventContextQuery{
 		EventID:                normalizedEventID,
 		PublicationWindowStart: windowStart.UTC(),
 		PublicationWindowEnd:   windowEnd.UTC(),
 		SourceRecordLimit:      limit,
-		ObservationLimit:       intelligence.MaxEventObservationsLimit,
+		ObservationLimit:       observationLimit,
 	}, nil
 }
 

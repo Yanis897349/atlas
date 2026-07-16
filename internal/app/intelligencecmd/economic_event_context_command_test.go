@@ -24,17 +24,41 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 	windowEnd := windowStart.Add(4 * time.Hour)
 	event := storedEventFixture("  Consumer Price Index  ", windowEnd)
 	events := &economicEventReaderStub{event: event}
-	observations := &observationReaderStub{results: []intelligence.StoredObservation{{
-		ID: "00000000-0000-0000-0000-000000000087",
-		Observation: intelligence.Observation{
-			EconomicEventID:     event.ID,
-			Source:              "official-statistics",
-			SourceObservationID: "cpi-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-2026-07",
-			ObservedAt:          windowEnd,
-			Actual:              observationValue("3.3%"),
+	observationResults := []intelligence.StoredObservation{
+		{
+			ID: "00000000-0000-0000-0000-000000000087",
+			Observation: intelligence.Observation{
+				EconomicEventID:     event.ID,
+				Source:              "official-statistics",
+				SourceObservationID: "cpi-2026-07",
+				SourceURL:           "https://example.com/releases/cpi-2026-07",
+				ObservedAt:          windowEnd.Add(time.Hour),
+				Consensus:           observationValue("3.1%"),
+				Previous:            observationValue("3.0%"),
+				Actual:              observationValue("3.3%"),
+			},
+			CreatedAt: windowEnd.Add(2 * time.Hour),
+			UpdatedAt: windowEnd.Add(3 * time.Hour),
+			CreatedBy: "observation-ingestion",
+			UpdatedBy: "observation-refresh",
 		},
-	}}}
+		{
+			ID: "00000000-0000-0000-0000-000000000086",
+			Observation: intelligence.Observation{
+				EconomicEventID:     event.ID,
+				Source:              "secondary-statistics",
+				SourceObservationID: "cpi-secondary-2026-07",
+				SourceURL:           "https://example.org/releases/cpi-2026-07",
+				ObservedAt:          windowStart,
+				Previous:            observationValue("3.2%"),
+			},
+			CreatedAt: windowStart.Add(time.Hour),
+			UpdatedAt: windowStart.Add(2 * time.Hour),
+			CreatedBy: "secondary-ingestion",
+			UpdatedBy: "secondary-refresh",
+		},
+	}
+	observations := &observationReaderStub{results: observationResults}
 	embedder := &embedderStub{batch: search.EmbeddingBatch{
 		Provider: " openai ",
 		Model:    " embedding-model ",
@@ -79,13 +103,30 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &encoded); err != nil {
 		t.Fatalf("decode output keys: %v", err)
 	}
-	if _, exists := encoded["observations"]; exists || len(encoded) != 4 {
-		t.Errorf("output keys = %v, want unchanged event context schema", reflect.ValueOf(encoded).MapKeys())
+	if _, exists := encoded["observations"]; !exists || len(encoded) != 5 {
+		t.Errorf("output keys = %v, want event context schema with observations", reflect.ValueOf(encoded).MapKeys())
 	}
 	if got.Event.ID != validEventID || got.Event.SourceURL == "" || got.Event.CreatedBy != "calendar-ingestion" ||
 		got.Event.UpdatedBy != "calendar-refresh" || got.Event.ScheduledAt != "2026-07-12T12:00:00Z" ||
 		got.PublicationWindowStart != "2026-07-12T08:00:00Z" ||
-		got.PublicationWindowEnd != "2026-07-12T12:00:00Z" || len(got.SourceRecords) != 2 ||
+		got.PublicationWindowEnd != "2026-07-12T12:00:00Z" || len(got.Observations) != 2 ||
+		got.Observations[0].ID != observationResults[0].ID ||
+		got.Observations[1].ID != observationResults[1].ID ||
+		got.Observations[0].EconomicEventID != event.ID ||
+		got.Observations[0].Source != "official-statistics" ||
+		got.Observations[0].SourceObservationID != "cpi-2026-07" ||
+		got.Observations[0].SourceURL != "https://example.com/releases/cpi-2026-07" ||
+		got.Observations[0].ObservedAt != "2026-07-12T13:00:00Z" ||
+		got.Observations[0].Consensus == nil || *got.Observations[0].Consensus != "3.1%" ||
+		got.Observations[0].Previous == nil || *got.Observations[0].Previous != "3.0%" ||
+		got.Observations[0].Actual == nil || *got.Observations[0].Actual != "3.3%" ||
+		got.Observations[0].CreatedAt != "2026-07-12T14:00:00Z" ||
+		got.Observations[0].UpdatedAt != "2026-07-12T15:00:00Z" ||
+		got.Observations[0].CreatedBy != "observation-ingestion" ||
+		got.Observations[0].UpdatedBy != "observation-refresh" ||
+		got.Observations[1].Consensus != nil || got.Observations[1].Actual != nil ||
+		got.Observations[1].Previous == nil || *got.Observations[1].Previous != "3.2%" ||
+		len(got.SourceRecords) != 2 ||
 		got.SourceRecords[0].ID != results[0].SourceRecord.ID ||
 		got.SourceRecords[1].ID != results[1].SourceRecord.ID ||
 		got.SourceRecords[0].PublishedAt != "2026-07-12T08:00:00Z" ||
@@ -94,9 +135,13 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 		got.SourceRecords[0].CosineDistance != 0.1 {
 		t.Errorf("output = %#v, want complete UTC event context in repository order", got)
 	}
+	if !strings.Contains(stdout.String(), `"consensus":null`) ||
+		!strings.Contains(stdout.String(), `"actual":null`) {
+		t.Errorf("output = %q, want nullable observation values encoded as null", stdout.String())
+	}
 }
 
-func TestRunEconomicEventContextWritesEmptySourceArray(t *testing.T) {
+func TestRunEconomicEventContextWritesEmptyArrays(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	err := runEconomicEventContext(
 		t.Context(),
@@ -111,13 +156,17 @@ func TestRunEconomicEventContextWritesEmptySourceArray(t *testing.T) {
 		t.Fatalf("runEconomicEventContext() error = %v", err)
 	}
 	var output struct {
-		SourceRecords []economicEventSourceOutput `json:"source_records"`
+		Observations  []economicEventObservationOutput `json:"observations"`
+		SourceRecords []economicEventSourceOutput      `json:"source_records"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("decode output: %v", err)
 	}
-	if output.SourceRecords == nil || len(output.SourceRecords) != 0 || !strings.Contains(stdout.String(), `"source_records":[]`) {
-		t.Errorf("source records = %#v (%q), want non-nil empty JSON array", output.SourceRecords, stdout.String())
+	if output.Observations == nil || len(output.Observations) != 0 ||
+		output.SourceRecords == nil || len(output.SourceRecords) != 0 ||
+		!strings.Contains(stdout.String(), `"observations":[]`) ||
+		!strings.Contains(stdout.String(), `"source_records":[]`) {
+		t.Errorf("arrays = (%#v, %#v) (%q), want non-nil empty JSON arrays", output.Observations, output.SourceRecords, stdout.String())
 	}
 }
 

@@ -16,6 +16,7 @@ func TestRunRejectsInvalidEconomicEventContextArgumentsBeforeConfiguration(t *te
 			arguments: []string{
 				"economic-event-context", "--event-id", "not-a-uuid",
 				"--from", "2026-07-12T08:00:00Z", "--to", "2026-07-12T12:00:00Z", "--limit", "10",
+				"--observation-limit", "10",
 			},
 			contains: "--event-id must be a UUID",
 		},
@@ -24,6 +25,7 @@ func TestRunRejectsInvalidEconomicEventContextArgumentsBeforeConfiguration(t *te
 			arguments: []string{
 				"economic-event-context", "--event-id", "00000000-0000-0000-0000-000000000085",
 				"--from", "2026-07-12T12:00:00Z", "--to", "2026-07-12T08:00:00Z", "--limit", "10",
+				"--observation-limit", "10",
 			},
 			contains: "--to must not be before --from",
 		},
@@ -32,8 +34,18 @@ func TestRunRejectsInvalidEconomicEventContextArgumentsBeforeConfiguration(t *te
 			arguments: []string{
 				"economic-event-context", "--event-id", "00000000-0000-0000-0000-000000000085",
 				"--from", "2026-07-12T08:00:00Z", "--to", "2026-07-12T12:00:00Z", "--limit", "0",
+				"--observation-limit", "10",
 			},
 			contains: "--limit must be between 1 and 100",
+		},
+		{
+			name: "observation limit",
+			arguments: []string{
+				"economic-event-context", "--event-id", "00000000-0000-0000-0000-000000000085",
+				"--from", "2026-07-12T08:00:00Z", "--to", "2026-07-12T12:00:00Z", "--limit", "10",
+				"--observation-limit", "0",
+			},
+			contains: "--observation-limit must be between 1 and 100",
 		},
 	}
 	for _, test := range tests {
@@ -87,5 +99,6 @@ func validEconomicEventContextArguments() []string {
 		"--from", "2026-07-12T08:00:00Z",
 		"--to", "2026-07-12T12:00:00Z",
 		"--limit", "10",
+		"--observation-limit", "10",
 	}
 }
