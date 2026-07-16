@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// UpsertObservation inserts a source observation or replaces it with a newer snapshot.
+// StoreObservation inserts a source observation or replaces it with a newer snapshot.
 // Source identity and creation audit fields remain immutable after the first insert.
-func (repository *Repository) UpsertObservation(
+func (repository *Repository) StoreObservation(
 	ctx context.Context,
 	observation intelligence.Observation,
 	actor string,

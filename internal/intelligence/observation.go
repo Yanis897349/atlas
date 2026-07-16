@@ -30,9 +30,9 @@ type StoredObservation struct {
 	UpdatedBy string
 }
 
-// ObservationPersistence stores the latest snapshot for one source observation identity.
-type ObservationPersistence interface {
-	UpsertObservation(context.Context, Observation, string) (StoredObservation, error)
+// ObservationWriter stores one normalized economic-event observation.
+type ObservationWriter interface {
+	StoreObservation(context.Context, Observation, string) (StoredObservation, error)
 }
 
 // ObservationReader retrieves observations associated with one canonical economic event.

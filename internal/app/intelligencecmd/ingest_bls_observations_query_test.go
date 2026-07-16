@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	intelligencebls "github.com/Yanis897349/atlas/internal/intelligence/bls"
 )
 
 const (
@@ -28,10 +30,24 @@ func TestParseIngestBLSObservationsNormalizesInput(t *testing.T) {
 		command.RequiresSourceRecordEmbedder() || command.RequiresEventContextRepositories() {
 		t.Errorf("command = %#v, want normalized BLS ingestion without event-context dependencies", command)
 	}
-	cpiEventID, employmentEventID, required := command.BLSObservationEventIDs()
-	if !required || cpiEventID != command.observationIngestion.cpiEventID ||
-		employmentEventID != command.observationIngestion.employmentEventID {
-		t.Errorf("BLSObservationEventIDs() = (%q, %q, %t), want parsed bindings", cpiEventID, employmentEventID, required)
+	targets, required := command.BLSObservationTargets()
+	wantTargets := []intelligencebls.Target{
+		{
+			EconomicEventID: command.observationIngestion.cpiEventID,
+			Series:          intelligencebls.SeriesCPIAllItemsNSA,
+		},
+		{
+			EconomicEventID: command.observationIngestion.employmentEventID,
+			Series:          intelligencebls.SeriesTotalNonfarmPayrollSA,
+		},
+	}
+	if !required || !reflect.DeepEqual(targets, wantTargets) {
+		t.Errorf("BLSObservationTargets() = (%#v, %t), want (%#v, true)", targets, required, wantTargets)
+	}
+	targets[0] = intelligencebls.Target{}
+	freshTargets, required := command.BLSObservationTargets()
+	if !required || !reflect.DeepEqual(freshTargets, wantTargets) {
+		t.Errorf("second BLSObservationTargets() = (%#v, %t), want fresh (%#v, true)", freshTargets, required, wantTargets)
 	}
 }
 
@@ -79,8 +95,8 @@ func TestCommandCapabilitiesExcludeOtherCommands(t *testing.T) {
 	if !command.RequiresSourceRecordEmbedder() || !command.RequiresEventContextRepositories() {
 		t.Errorf("event-context capabilities = (%t, %t), want both true", command.RequiresSourceRecordEmbedder(), command.RequiresEventContextRepositories())
 	}
-	if cpiEventID, employmentEventID, required := command.BLSObservationEventIDs(); required || cpiEventID != "" || employmentEventID != "" {
-		t.Errorf("BLSObservationEventIDs() = (%q, %q, %t), want empty", cpiEventID, employmentEventID, required)
+	if targets, required := command.BLSObservationTargets(); required || targets != nil {
+		t.Errorf("BLSObservationTargets() = (%#v, %t), want (nil, false)", targets, required)
 	}
 	if reflect.DeepEqual(command, Command{}) {
 		t.Fatal("parsed event-context command is zero")

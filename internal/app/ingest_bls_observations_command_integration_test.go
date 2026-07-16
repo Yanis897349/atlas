@@ -145,7 +145,7 @@ ORDER BY economic_event_id
 	assertBLSObservation(t, observations[1], validBLSEmploymentEventID, "CES0000000001:2026-M06", "+50", "+100")
 }
 
-func TestRunRejectsMismatchedBLSObservationEventsBeforeProviderAndPersistence(t *testing.T) {
+func TestRunRejectsMismatchedBLSObservationEventsBeforeProviderAndWriter(t *testing.T) {
 	database := postgrestest.Open(t)
 	if err := Run(t.Context(), []string{"migrate"}, Dependencies{
 		Getenv: applicationDatabaseEnv(database.URL),

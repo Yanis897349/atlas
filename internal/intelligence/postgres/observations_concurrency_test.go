@@ -17,7 +17,7 @@ func TestRepositoryEventObservationsLocksEventDuringRetrieval(t *testing.T) {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
 	event := insertEconomicEvent(t, pool, "observation-concurrent-delete")
-	created, err := repository.UpsertObservation(t.Context(), intelligence.Observation{
+	created, err := repository.StoreObservation(t.Context(), intelligence.Observation{
 		EconomicEventID:     event.ID,
 		Source:              "official-statistics",
 		SourceObservationID: "concurrent-delete",
@@ -26,7 +26,7 @@ func TestRepositoryEventObservationsLocksEventDuringRetrieval(t *testing.T) {
 		Actual:              text("3.2%"),
 	}, "observation-ingestion")
 	if err != nil {
-		t.Fatalf("UpsertObservation() error = %v", err)
+		t.Fatalf("StoreObservation() error = %v", err)
 	}
 
 	blocker, err := pool.Begin(t.Context())

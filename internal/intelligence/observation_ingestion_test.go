@@ -31,9 +31,9 @@ func TestIngestObservationsPersistsAdapterSnapshotsInOrder(t *testing.T) {
 		},
 	}
 	adapter := &observationAdapterStub{observations: observations}
-	persistence := &observationPersistenceStub{}
+	writer := &observationWriterStub{}
 
-	count, err := IngestObservations(t.Context(), adapter, persistence, 17, " observation-ingestion ")
+	count, err := IngestObservations(t.Context(), adapter, writer, 17, " observation-ingestion ")
 	if err != nil {
 		t.Fatalf("IngestObservations() error = %v", err)
 	}
@@ -43,11 +43,11 @@ func TestIngestObservationsPersistsAdapterSnapshotsInOrder(t *testing.T) {
 	if adapter.calls != 1 || adapter.limit != 17 {
 		t.Errorf("FetchObservations() call = (%d, %d), want (1, 17)", adapter.calls, adapter.limit)
 	}
-	if !reflect.DeepEqual(persistence.observations, observations) {
-		t.Errorf("persisted observations = %#v, want exact adapter order %#v", persistence.observations, observations)
+	if !reflect.DeepEqual(writer.observations, observations) {
+		t.Errorf("persisted observations = %#v, want exact adapter order %#v", writer.observations, observations)
 	}
-	if !reflect.DeepEqual(persistence.actors, []string{"observation-ingestion", "observation-ingestion"}) {
-		t.Errorf("persistence actors = %#v, want normalized actor for every observation", persistence.actors)
+	if !reflect.DeepEqual(writer.actors, []string{"observation-ingestion", "observation-ingestion"}) {
+		t.Errorf("writer actors = %#v, want normalized actor for every observation", writer.actors)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestIngestObservationsRejectsInvalidInputBeforeDependencies(t *testing.T) {
 			count, err := IngestObservations(
 				t.Context(),
 				panicObservationAdapter{},
-				panicObservationPersistence{},
+				panicObservationWriter{},
 				test.limit,
 				test.actor,
 			)
@@ -86,7 +86,7 @@ func TestIngestObservationsHandlesEmptyAdapterResult(t *testing.T) {
 	count, err := IngestObservations(
 		t.Context(),
 		adapter,
-		panicObservationPersistence{},
+		panicObservationWriter{},
 		MaxObservationIngestionLimit,
 		"actor",
 	)
@@ -106,7 +106,7 @@ func TestIngestObservationsHandlesEmptyAdapterResult(t *testing.T) {
 	}
 }
 
-func TestIngestObservationsRejectsAdapterResultsAboveLimitBeforePersistence(t *testing.T) {
+func TestIngestObservationsRejectsAdapterResultsAboveLimitBeforeWriter(t *testing.T) {
 	adapter := &observationAdapterStub{observations: []Observation{
 		{SourceObservationID: "first"},
 		{SourceObservationID: "second"},
@@ -115,7 +115,7 @@ func TestIngestObservationsRejectsAdapterResultsAboveLimitBeforePersistence(t *t
 	count, err := IngestObservations(
 		t.Context(),
 		adapter,
-		panicObservationPersistence{},
+		panicObservationWriter{},
 		1,
 		"actor",
 	)
@@ -142,7 +142,7 @@ func TestIngestObservationsPreservesFetchFailures(t *testing.T) {
 			count, err := IngestObservations(
 				t.Context(),
 				&observationAdapterStub{err: test.err},
-				panicObservationPersistence{},
+				panicObservationWriter{},
 				1,
 				"actor",
 			)
@@ -154,19 +154,19 @@ func TestIngestObservationsPreservesFetchFailures(t *testing.T) {
 	}
 }
 
-func TestIngestObservationsStopsAfterPersistenceFailure(t *testing.T) {
+func TestIngestObservationsStopsAfterWriterFailure(t *testing.T) {
 	observations := []Observation{
 		{SourceObservationID: "first"},
 		{SourceObservationID: "second"},
 		{SourceObservationID: "third"},
 	}
 	persistErr := errors.New("database unavailable")
-	persistence := &observationPersistenceStub{failAt: 2, err: persistErr}
+	writer := &observationWriterStub{failAt: 2, err: persistErr}
 
 	count, err := IngestObservations(
 		t.Context(),
 		&observationAdapterStub{observations: observations},
-		persistence,
+		writer,
 		3,
 		"actor",
 	)
@@ -174,18 +174,18 @@ func TestIngestObservationsStopsAfterPersistenceFailure(t *testing.T) {
 		!strings.Contains(err.Error(), "persist economic event observation 2") {
 		t.Fatalf("IngestObservations() = (%d, %v), want one processed observation and contextual failure", count, err)
 	}
-	if !reflect.DeepEqual(persistence.observations, observations[:2]) {
-		t.Errorf("attempted observations = %#v, want %#v", persistence.observations, observations[:2])
+	if !reflect.DeepEqual(writer.observations, observations[:2]) {
+		t.Errorf("attempted observations = %#v, want %#v", writer.observations, observations[:2])
 	}
 }
 
-func TestIngestObservationsPreservesPersistenceCancellation(t *testing.T) {
+func TestIngestObservationsPreservesWriterCancellation(t *testing.T) {
 	observation := Observation{SourceObservationID: "first"}
 
 	count, err := IngestObservations(
 		t.Context(),
 		&observationAdapterStub{observations: []Observation{observation}},
-		&observationPersistenceStub{failAt: 1, err: context.Canceled},
+		&observationWriterStub{failAt: 1, err: context.Canceled},
 		1,
 		"actor",
 	)
@@ -208,22 +208,22 @@ func (adapter *observationAdapterStub) FetchObservations(_ context.Context, limi
 	return adapter.observations, adapter.err
 }
 
-type observationPersistenceStub struct {
+type observationWriterStub struct {
 	observations []Observation
 	actors       []string
 	failAt       int
 	err          error
 }
 
-func (persistence *observationPersistenceStub) UpsertObservation(
+func (writer *observationWriterStub) StoreObservation(
 	_ context.Context,
 	observation Observation,
 	actor string,
 ) (StoredObservation, error) {
-	persistence.observations = append(persistence.observations, observation)
-	persistence.actors = append(persistence.actors, actor)
-	if persistence.err != nil && len(persistence.observations) == persistence.failAt {
-		return StoredObservation{}, persistence.err
+	writer.observations = append(writer.observations, observation)
+	writer.actors = append(writer.actors, actor)
+	if writer.err != nil && len(writer.observations) == writer.failAt {
+		return StoredObservation{}, writer.err
 	}
 	return StoredObservation{Observation: observation}, nil
 }
@@ -234,14 +234,14 @@ func (panicObservationAdapter) FetchObservations(context.Context, int) ([]Observ
 	panic("unexpected observation adapter call")
 }
 
-type panicObservationPersistence struct{}
+type panicObservationWriter struct{}
 
-func (panicObservationPersistence) UpsertObservation(
+func (panicObservationWriter) StoreObservation(
 	context.Context,
 	Observation,
 	string,
 ) (StoredObservation, error) {
-	panic("unexpected observation persistence call")
+	panic("unexpected observation writer call")
 }
 
 func observationValue(value string) *string {

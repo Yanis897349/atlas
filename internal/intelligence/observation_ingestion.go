@@ -19,7 +19,7 @@ type ObservationAdapter interface {
 func IngestObservations(
 	ctx context.Context,
 	adapter ObservationAdapter,
-	persistence ObservationPersistence,
+	writer ObservationWriter,
 	limit int,
 	actor string,
 ) (int, error) {
@@ -44,7 +44,7 @@ func IngestObservations(
 	}
 
 	for index, observation := range observations {
-		if _, err := persistence.UpsertObservation(ctx, observation, actor); err != nil {
+		if _, err := writer.StoreObservation(ctx, observation, actor); err != nil {
 			return index, fmt.Errorf("persist economic event observation %d: %w", index+1, err)
 		}
 	}

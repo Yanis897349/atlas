@@ -103,11 +103,11 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	}
 	storedObservations := make(map[string]intelligence.StoredObservation, len(observationFixtures))
 	for _, fixture := range observationFixtures {
-		stored, persistErr := observationRepository.UpsertObservation(
+		stored, persistErr := observationRepository.StoreObservation(
 			t.Context(), fixture, "observation-ingestion",
 		)
 		if persistErr != nil {
-			t.Fatalf("UpsertObservation(%q) error = %v", fixture.SourceObservationID, persistErr)
+			t.Fatalf("StoreObservation(%q) error = %v", fixture.SourceObservationID, persistErr)
 		}
 		storedObservations[fixture.SourceObservationID] = stored
 	}

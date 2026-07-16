@@ -21,7 +21,7 @@ func TestRunIngestBLSObservationsWritesCompleteCount(t *testing.T) {
 		blsObservationFixture(validEmploymentEventID, "CES0000000001:2026-M06"),
 	}
 	adapter := &observationAdapterStub{observations: observations}
-	persistence := &observationPersistenceStub{}
+	writer := &observationWriterStub{}
 	stdout := &bytes.Buffer{}
 	command := validBLSObservationIngestionCommand()
 
@@ -29,20 +29,20 @@ func TestRunIngestBLSObservationsWritesCompleteCount(t *testing.T) {
 		t.Context(),
 		validBLSObservationEventReader(),
 		adapter,
-		persistence,
+		writer,
 		stdout,
 		command,
 	); err != nil {
 		t.Fatalf("runIngestBLSObservations() error = %v", err)
 	}
-	if adapter.limit != 2 || !reflect.DeepEqual(persistence.observations, observations) {
-		t.Errorf("ingestion = adapter limit %d, observations %#v; want complete adapter order", adapter.limit, persistence.observations)
+	if adapter.limit != 2 || !reflect.DeepEqual(writer.observations, observations) {
+		t.Errorf("ingestion = adapter limit %d, observations %#v; want complete adapter order", adapter.limit, writer.observations)
 	}
-	if !reflect.DeepEqual(persistence.actors, []string{
+	if !reflect.DeepEqual(writer.actors, []string{
 		blsObservationIngestionActor,
 		blsObservationIngestionActor,
 	}) {
-		t.Errorf("actors = %#v, want fixed BLS ingestion actor", persistence.actors)
+		t.Errorf("actors = %#v, want fixed BLS ingestion actor", writer.actors)
 	}
 	if stdout.String() != "ingested 2 BLS economic event observations\n" {
 		t.Errorf("stdout = %q, want complete count", stdout.String())
@@ -55,7 +55,7 @@ func TestRunIngestBLSObservationsWritesEmptyCount(t *testing.T) {
 		t.Context(),
 		validBLSObservationEventReader(),
 		&observationAdapterStub{observations: []intelligence.Observation{}},
-		&observationPersistenceStub{},
+		&observationWriterStub{},
 		stdout,
 		validBLSObservationIngestionCommand(),
 	)
@@ -132,13 +132,13 @@ func TestRunIngestBLSObservationsRejectsInvalidEventBindingsBeforeDependencies(t
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			adapter := &observationAdapterStub{}
-			persistence := &observationPersistenceStub{}
+			writer := &observationWriterStub{}
 			stdout := &bytes.Buffer{}
 			err := runIngestBLSObservations(
 				t.Context(),
 				test.reader,
 				adapter,
-				persistence,
+				writer,
 				stdout,
 				validBLSObservationIngestionCommand(),
 			)
@@ -147,11 +147,11 @@ func TestRunIngestBLSObservationsRejectsInvalidEventBindingsBeforeDependencies(t
 				(test.wantErr != nil && !errors.Is(err, test.wantErr)) {
 				t.Fatalf("error = %v, want zero-count binding failure containing %q", err, test.contains)
 			}
-			if adapter.calls != 0 || len(persistence.observations) != 0 || stdout.Len() != 0 {
+			if adapter.calls != 0 || len(writer.observations) != 0 || stdout.Len() != 0 {
 				t.Errorf(
-					"dependencies/output = adapter %d, persistence %d, stdout %q; want untouched",
+					"dependencies/output = adapter %d, writer %d, stdout %q; want untouched",
 					adapter.calls,
-					len(persistence.observations),
+					len(writer.observations),
 					stdout.String(),
 				)
 			}
@@ -170,14 +170,14 @@ func TestRunIngestBLSObservationsReportsPartialCountWithoutSuccessOutput(t *test
 		t.Context(),
 		validBLSObservationEventReader(),
 		&observationAdapterStub{observations: observations},
-		&observationPersistenceStub{failAt: 2, err: wantErr},
+		&observationWriterStub{failAt: 2, err: wantErr},
 		stdout,
 		validBLSObservationIngestionCommand(),
 	)
 	if err == nil || !errors.Is(err, wantErr) ||
 		!strings.Contains(err.Error(), "after 1 processed observations") ||
 		!strings.Contains(err.Error(), "persist economic event observation 2") {
-		t.Fatalf("error = %v, want partial count and contextual persistence failure", err)
+		t.Fatalf("error = %v, want partial count and contextual writer failure", err)
 	}
 	if stdout.Len() != 0 {
 		t.Errorf("stdout = %q, want no premature success output", stdout.String())
@@ -190,7 +190,7 @@ func TestRunIngestBLSObservationsPreservesCancellationWithoutSuccessOutput(t *te
 		t.Context(),
 		validBLSObservationEventReader(),
 		&observationAdapterStub{err: context.Canceled},
-		&observationPersistenceStub{},
+		&observationWriterStub{},
 		stdout,
 		validBLSObservationIngestionCommand(),
 	)
@@ -218,7 +218,7 @@ func TestRunIngestBLSObservationsReportsOutputFailures(t *testing.T) {
 				t.Context(),
 				validBLSObservationEventReader(),
 				&observationAdapterStub{observations: []intelligence.Observation{}},
-				&observationPersistenceStub{},
+				&observationWriterStub{},
 				test.stdout,
 				validBLSObservationIngestionCommand(),
 			)
@@ -303,23 +303,23 @@ func (reader *blsObservationEventReaderStub) EconomicEvent(
 	return reader.events[id], reader.errors[id]
 }
 
-type observationPersistenceStub struct {
+type observationWriterStub struct {
 	observations []intelligence.Observation
 	actors       []string
 	failAt       int
 	err          error
 }
 
-func (persistence *observationPersistenceStub) UpsertObservation(
+func (writer *observationWriterStub) StoreObservation(
 	_ context.Context,
 	observation intelligence.Observation,
 	actor string,
 ) (intelligence.StoredObservation, error) {
-	call := len(persistence.observations) + 1
-	if persistence.failAt == call {
-		return intelligence.StoredObservation{}, persistence.err
+	call := len(writer.observations) + 1
+	if writer.failAt == call {
+		return intelligence.StoredObservation{}, writer.err
 	}
-	persistence.observations = append(persistence.observations, observation)
-	persistence.actors = append(persistence.actors, actor)
+	writer.observations = append(writer.observations, observation)
+	writer.actors = append(writer.actors, actor)
 	return intelligence.StoredObservation{Observation: observation}, nil
 }

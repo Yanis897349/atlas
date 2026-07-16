@@ -18,13 +18,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestRepositoryUpsertsLatestObservationSnapshot(t *testing.T) {
+func TestRepositoryStoresLatestObservationSnapshot(t *testing.T) {
 	pool := openTestPool(t)
 	repository, err := intelligencepostgres.NewRepository(pool)
 	if err != nil {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
-	event := insertEconomicEvent(t, pool, "observation-upsert")
+	event := insertEconomicEvent(t, pool, "observation-store")
 	location := time.FixedZone("CEST", 2*60*60)
 	initial := intelligence.Observation{
 		EconomicEventID:     strings.ToUpper(event.ID),
@@ -36,9 +36,9 @@ func TestRepositoryUpsertsLatestObservationSnapshot(t *testing.T) {
 		Previous:            text("3.1%"),
 	}
 
-	created, err := repository.UpsertObservation(t.Context(), initial, " observation-ingestion ")
+	created, err := repository.StoreObservation(t.Context(), initial, " observation-ingestion ")
 	if err != nil {
-		t.Fatalf("first UpsertObservation() error = %v", err)
+		t.Fatalf("first StoreObservation() error = %v", err)
 	}
 	if created.EconomicEventID != event.ID || created.Source != "official-statistics" ||
 		created.SourceObservationID != "cpi-2026-06" || value(created.Consensus) != "3.2%" ||
@@ -48,9 +48,9 @@ func TestRepositoryUpsertsLatestObservationSnapshot(t *testing.T) {
 	}
 	assertUTCObservation(t, created)
 
-	retried, err := repository.UpsertObservation(t.Context(), initial, "retry-worker")
+	retried, err := repository.StoreObservation(t.Context(), initial, "retry-worker")
 	if err != nil {
-		t.Fatalf("retry UpsertObservation() error = %v", err)
+		t.Fatalf("retry StoreObservation() error = %v", err)
 	}
 	if !reflect.DeepEqual(retried, created) {
 		t.Errorf("retried observation = %#v, want unchanged %#v", retried, created)
@@ -61,9 +61,9 @@ func TestRepositoryUpsertsLatestObservationSnapshot(t *testing.T) {
 	older.SourceObservationID = "cpi-2026-06"
 	older.ObservedAt = initial.ObservedAt.Add(-time.Minute)
 	older.Actual = text("stale")
-	unchanged, err := repository.UpsertObservation(t.Context(), older, "older-worker")
+	unchanged, err := repository.StoreObservation(t.Context(), older, "older-worker")
 	if err != nil {
-		t.Fatalf("older UpsertObservation() error = %v", err)
+		t.Fatalf("older StoreObservation() error = %v", err)
 	}
 	if !reflect.DeepEqual(unchanged, created) {
 		t.Errorf("older observation = %#v, want unchanged %#v", unchanged, created)
@@ -80,9 +80,9 @@ func TestRepositoryUpsertsLatestObservationSnapshot(t *testing.T) {
 	newer.Consensus = nil
 	newer.Previous = text("3.0%")
 	newer.Actual = text("3.3%")
-	updated, err := repository.UpsertObservation(t.Context(), newer, "refresh-worker")
+	updated, err := repository.StoreObservation(t.Context(), newer, "refresh-worker")
 	if err != nil {
-		t.Fatalf("newer UpsertObservation() error = %v", err)
+		t.Fatalf("newer StoreObservation() error = %v", err)
 	}
 	if updated.ID != created.ID || updated.CreatedAt != created.CreatedAt || updated.CreatedBy != created.CreatedBy {
 		t.Errorf("creation metadata changed from %#v to %#v", created, updated)
@@ -107,9 +107,9 @@ func TestRepositoryRetrievesObservationsDeterministically(t *testing.T) {
 	}
 	stored := make(map[string]intelligence.StoredObservation, len(inputs))
 	for _, input := range inputs {
-		result, err := repository.UpsertObservation(t.Context(), input, "observation-ingestion")
+		result, err := repository.StoreObservation(t.Context(), input, "observation-ingestion")
 		if err != nil {
-			t.Fatalf("UpsertObservation(%q) error = %v", input.SourceObservationID, err)
+			t.Fatalf("StoreObservation(%q) error = %v", input.SourceObservationID, err)
 		}
 		stored[input.SourceObservationID] = result
 	}
@@ -168,15 +168,15 @@ func TestRepositoryEnforcesObservationReferencesAndCascade(t *testing.T) {
 		nil,
 		nil,
 	)
-	if _, err := repository.UpsertObservation(t.Context(), missing, "worker"); err == nil || !strings.Contains(err.Error(), "upsert economic event observation") {
-		t.Fatalf("UpsertObservation(missing event) error = %v, want contextual reference failure", err)
+	if _, err := repository.StoreObservation(t.Context(), missing, "worker"); err == nil || !strings.Contains(err.Error(), "upsert economic event observation") {
+		t.Fatalf("StoreObservation(missing event) error = %v, want contextual reference failure", err)
 	}
 
 	event := insertEconomicEvent(t, pool, "observation-cascade")
-	if _, err := repository.UpsertObservation(t.Context(), observationFixture(
+	if _, err := repository.StoreObservation(t.Context(), observationFixture(
 		event.ID, "cascade", time.Now(), nil, nil, text("3.0%"),
 	), "worker"); err != nil {
-		t.Fatalf("UpsertObservation() error = %v", err)
+		t.Fatalf("StoreObservation() error = %v", err)
 	}
 	if _, err := pool.Exec(t.Context(), `DELETE FROM economic_events WHERE id = $1`, event.ID); err != nil {
 		t.Fatalf("delete economic event: %v", err)

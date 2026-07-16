@@ -16,8 +16,6 @@ import (
 	databasepostgres "github.com/Yanis897349/atlas/internal/database/postgres"
 	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
 	"github.com/Yanis897349/atlas/internal/ingestion/rss"
-	"github.com/Yanis897349/atlas/internal/intelligence"
-	intelligencebls "github.com/Yanis897349/atlas/internal/intelligence/bls"
 	openaiapi "github.com/Yanis897349/atlas/internal/openai"
 	"github.com/Yanis897349/atlas/internal/watchlist"
 	watchlistpostgres "github.com/Yanis897349/atlas/internal/watchlist/postgres"
@@ -28,14 +26,6 @@ import (
 type CalendarSourceDependencies struct {
 	HTTPClient    sourcehttp.Client
 	CalendarURL   string
-	Now           func() time.Time
-	RequestBudget time.Duration
-}
-
-// BLSObservationDependencies contains deterministic seams for official BLS observations.
-type BLSObservationDependencies struct {
-	HTTPClient    intelligencebls.HTTPClient
-	Endpoint      string
 	Now           func() time.Time
 	RequestBudget time.Duration
 }
@@ -89,24 +79,12 @@ func Run(ctx context.Context, arguments []string, dependencies Dependencies) err
 			return err
 		}
 	}
-	var observationAdapter intelligence.ObservationAdapter
-	if parsedCommand.intelligenceCommand != nil {
-		cpiEventID, employmentEventID, required := parsedCommand.intelligenceCommand.BLSObservationEventIDs()
-		if required {
-			observationAdapter, err = intelligencebls.NewAdapter(intelligencebls.Config{
-				Targets: []intelligencebls.Target{
-					{EconomicEventID: cpiEventID, Series: intelligencebls.SeriesCPIAllItemsNSA},
-					{EconomicEventID: employmentEventID, Series: intelligencebls.SeriesTotalNonfarmPayrollSA},
-				},
-				Endpoint:      dependencies.BLSObservations.Endpoint,
-				Client:        dependencies.BLSObservations.HTTPClient,
-				Now:           dependencies.BLSObservations.Now,
-				RequestBudget: dependencies.BLSObservations.RequestBudget,
-			})
-			if err != nil {
-				return fmt.Errorf("configure BLS economic event observations: %w", err)
-			}
-		}
+	observationAdapter, err := configuredBLSObservationAdapter(
+		parsedCommand.intelligenceCommand,
+		dependencies.BLSObservations,
+	)
+	if err != nil {
+		return err
 	}
 	requiresIntelligenceEmbedder := parsedCommand.intelligenceCommand != nil &&
 		parsedCommand.intelligenceCommand.RequiresSourceRecordEmbedder()

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/Yanis897349/atlas/internal/intelligence"
+	intelligencebls "github.com/Yanis897349/atlas/internal/intelligence/bls"
 	"github.com/Yanis897349/atlas/internal/search"
 )
 
@@ -18,12 +19,12 @@ type Command struct {
 
 // Dependencies contains the domain dependencies used by intelligence commands.
 type Dependencies struct {
-	Events                 intelligence.EconomicEventReader
-	Observations           intelligence.ObservationReader
-	ObservationPersistence intelligence.ObservationPersistence
-	ObservationAdapter     intelligence.ObservationAdapter
-	Embedder               search.Embedder
-	SourceRecords          search.SimilarSourceRecordReader
+	Events             intelligence.EconomicEventReader
+	Observations       intelligence.ObservationReader
+	ObservationWriter  intelligence.ObservationWriter
+	ObservationAdapter intelligence.ObservationAdapter
+	Embedder           search.Embedder
+	SourceRecords      search.SimilarSourceRecordReader
 }
 
 // Parse recognizes and validates one intelligence command.
@@ -59,14 +60,12 @@ func (command Command) RequiresEventContextRepositories() bool {
 	return command.name == "economic-event-context"
 }
 
-// BLSObservationEventIDs returns the canonical event bindings for BLS ingestion.
-func (command Command) BLSObservationEventIDs() (string, string, bool) {
+// BLSObservationTargets returns the canonical event-to-series targets for BLS ingestion.
+func (command Command) BLSObservationTargets() ([]intelligencebls.Target, bool) {
 	if command.name != "ingest-bls-observations" {
-		return "", "", false
+		return nil, false
 	}
-	return command.observationIngestion.cpiEventID,
-		command.observationIngestion.employmentEventID,
-		true
+	return command.observationIngestion.blsObservationTargets(), true
 }
 
 // Run executes one validated intelligence command.
@@ -92,7 +91,7 @@ func Run(
 			ctx,
 			dependencies.Events,
 			dependencies.ObservationAdapter,
-			dependencies.ObservationPersistence,
+			dependencies.ObservationWriter,
 			stdout,
 			command.observationIngestion,
 		)

@@ -37,12 +37,12 @@ func TestRepositoryValidatesObservationBeforePostgreSQL(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := repository.UpsertObservation(t.Context(), test.observation, test.actor)
+			got, err := repository.StoreObservation(t.Context(), test.observation, test.actor)
 			if err == nil || !strings.Contains(err.Error(), test.contains) {
-				t.Fatalf("UpsertObservation() error = %v, want %q", err, test.contains)
+				t.Fatalf("StoreObservation() error = %v, want %q", err, test.contains)
 			}
 			if got != (intelligence.StoredObservation{}) {
-				t.Errorf("UpsertObservation() = %#v, want zero observation", got)
+				t.Errorf("StoreObservation() = %#v, want zero observation", got)
 			}
 		})
 	}
@@ -83,16 +83,16 @@ func TestRepositoryPreservesObservationDatabaseFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
-	if _, err := repository.UpsertObservation(t.Context(), validObservation(), "worker"); err == nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "upsert economic event observation") {
-		t.Fatalf("UpsertObservation() error = %v, want contextual database failure", err)
+	if _, err := repository.StoreObservation(t.Context(), validObservation(), "worker"); err == nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "upsert economic event observation") {
+		t.Fatalf("StoreObservation() error = %v, want contextual database failure", err)
 	}
 	if _, err := repository.EventObservations(t.Context(), validEventID, 1); err == nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "begin economic event observation retrieval") {
 		t.Fatalf("EventObservations() error = %v, want contextual database failure", err)
 	}
 
 	canceledRepository, _ := NewRepository(failureDB{err: context.Canceled})
-	if _, err := canceledRepository.UpsertObservation(t.Context(), validObservation(), "worker"); !errors.Is(err, context.Canceled) {
-		t.Errorf("UpsertObservation() error = %v, want context.Canceled", err)
+	if _, err := canceledRepository.StoreObservation(t.Context(), validObservation(), "worker"); !errors.Is(err, context.Canceled) {
+		t.Errorf("StoreObservation() error = %v, want context.Canceled", err)
 	}
 	if _, err := canceledRepository.EventObservations(t.Context(), validEventID, 1); !errors.Is(err, context.Canceled) {
 		t.Errorf("EventObservations() error = %v, want context.Canceled", err)

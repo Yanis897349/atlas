@@ -8,6 +8,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar"
 	calendarbls "github.com/Yanis897349/atlas/internal/calendar/bls"
 	"github.com/Yanis897349/atlas/internal/intelligence"
+	intelligencebls "github.com/Yanis897349/atlas/internal/intelligence/bls"
 )
 
 const (
@@ -16,11 +17,21 @@ const (
 	blsEmploymentEventName       = "Employment Situation"
 )
 
+type blsObservationBinding struct {
+	label           string
+	economicEventID string
+	source          string
+	region          calendar.Region
+	name            string
+	eventType       calendar.EventType
+	series          intelligencebls.Series
+}
+
 func runIngestBLSObservations(
 	ctx context.Context,
 	events intelligence.EconomicEventReader,
 	adapter intelligence.ObservationAdapter,
-	persistence intelligence.ObservationPersistence,
+	writer intelligence.ObservationWriter,
 	stdout io.Writer,
 	command ingestBLSObservationsCommand,
 ) error {
@@ -34,7 +45,7 @@ func runIngestBLSObservations(
 	count, err := intelligence.IngestObservations(
 		ctx,
 		adapter,
-		persistence,
+		writer,
 		command.limit,
 		blsObservationIngestionActor,
 	)
@@ -62,29 +73,55 @@ func validateBLSObservationEvents(
 	events intelligence.EconomicEventReader,
 	command ingestBLSObservationsCommand,
 ) error {
-	expected := []struct {
-		label     string
-		id        string
-		name      string
-		eventType calendar.EventType
-	}{
-		{label: "CPI", id: command.cpiEventID, name: blsCPIEventName, eventType: calendar.EventTypeInflation},
-		{label: "Employment Situation", id: command.employmentEventID, name: blsEmploymentEventName, eventType: calendar.EventTypeEmployment},
-	}
-	for _, expectation := range expected {
-		event, err := events.EconomicEvent(ctx, expectation.id)
+	for _, binding := range command.blsObservationBindings() {
+		event, err := events.EconomicEvent(ctx, binding.economicEventID)
 		if err != nil {
-			return fmt.Errorf("retrieve %s economic event: %w", expectation.label, err)
+			return fmt.Errorf("retrieve %s economic event: %w", binding.label, err)
 		}
-		if event.Source != calendarbls.Source || event.Region != calendar.RegionUnitedStates ||
-			event.Name != expectation.name || event.Type != expectation.eventType {
+		if event.Source != binding.source || event.Region != binding.region ||
+			event.Name != binding.name || event.Type != binding.eventType {
 			return fmt.Errorf(
 				"%s economic event %q must be the canonical BLS %s release",
-				expectation.label,
-				expectation.id,
-				expectation.name,
+				binding.label,
+				binding.economicEventID,
+				binding.name,
 			)
 		}
 	}
 	return nil
+}
+
+func (command ingestBLSObservationsCommand) blsObservationBindings() []blsObservationBinding {
+	return []blsObservationBinding{
+		{
+			label:           "CPI",
+			economicEventID: command.cpiEventID,
+			source:          calendarbls.Source,
+			region:          calendar.RegionUnitedStates,
+			name:            blsCPIEventName,
+			eventType:       calendar.EventTypeInflation,
+			series:          intelligencebls.SeriesCPIAllItemsNSA,
+		},
+		{
+			label:           "Employment Situation",
+			economicEventID: command.employmentEventID,
+			source:          calendarbls.Source,
+			region:          calendar.RegionUnitedStates,
+			name:            blsEmploymentEventName,
+			eventType:       calendar.EventTypeEmployment,
+			series:          intelligencebls.SeriesTotalNonfarmPayrollSA,
+		},
+	}
+}
+
+func (command ingestBLSObservationsCommand) blsObservationTargets() []intelligencebls.Target {
+	bindings := command.blsObservationBindings()
+	targets := make([]intelligencebls.Target, 0, len(bindings))
+	for _, binding := range bindings {
+		targets = append(targets, intelligencebls.Target{
+			EconomicEventID: binding.economicEventID,
+			Series:          binding.series,
+		})
+	}
+	return targets
 }
