@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +10,61 @@ import (
 	intelligencepostgres "github.com/Yanis897349/atlas/internal/intelligence/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestRepositorySerializesUnchangedObservationWrites(t *testing.T) {
+	pool := openTestPool(t)
+	repository, err := intelligencepostgres.NewRepository(pool)
+	if err != nil {
+		t.Fatalf("NewRepository() error = %v", err)
+	}
+	event := insertEconomicEvent(t, pool, "observation-concurrent-writes")
+	base := time.Date(2026, time.July, 17, 8, 0, 0, 0, time.UTC)
+
+	const writerCount = 8
+	start := make(chan struct{})
+	errors := make(chan error, writerCount)
+	var writers sync.WaitGroup
+	for index := range writerCount {
+		writers.Add(1)
+		go func() {
+			defer writers.Done()
+			<-start
+			_, storeErr := repository.StoreObservation(t.Context(), intelligence.Observation{
+				EconomicEventID:     event.ID,
+				Source:              "official-statistics",
+				SourceObservationID: "concurrent-unchanged",
+				SourceURL:           "https://example.com/releases/concurrent-unchanged",
+				ObservedAt:          base.Add(time.Duration(index) * time.Minute),
+				Actual:              text("3.2%"),
+			}, "observation-ingestion")
+			errors <- storeErr
+		}()
+	}
+	close(start)
+	writers.Wait()
+	close(errors)
+
+	for err := range errors {
+		if err != nil {
+			t.Errorf("StoreObservation() error = %v", err)
+		}
+	}
+	assertObservationCount(t, pool, 1)
+
+	var latestObservedAt time.Time
+	if err := pool.QueryRow(t.Context(), `
+SELECT latest_observed_at
+FROM economic_event_observation_watermarks
+WHERE economic_event_id = $1
+  AND source = 'official-statistics'
+  AND source_observation_id = 'concurrent-unchanged'
+`, event.ID).Scan(&latestObservedAt); err != nil {
+		t.Fatalf("load concurrent observation watermark: %v", err)
+	}
+	if !latestObservedAt.Equal(base.Add((writerCount - 1) * time.Minute)) {
+		t.Errorf("concurrent observation watermark = %s, want latest input", latestObservedAt)
+	}
+}
 
 func TestRepositoryEventObservationsLocksEventDuringRetrieval(t *testing.T) {
 	pool := openTestPool(t)

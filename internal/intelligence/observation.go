@@ -30,7 +30,7 @@ type StoredObservation struct {
 	UpdatedBy string
 }
 
-// ObservationWriter stores one normalized economic-event observation.
+// ObservationWriter stores one normalized economic-event observation revision.
 type ObservationWriter interface {
 	StoreObservation(context.Context, Observation, string) (StoredObservation, error)
 }

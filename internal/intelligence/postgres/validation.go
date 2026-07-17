@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Yanis897349/atlas/internal/intelligence"
 	atlasuuid "github.com/Yanis897349/atlas/internal/uuid"
@@ -34,7 +35,7 @@ func normalizeAndValidateObservation(
 	if observation.ObservedAt.IsZero() {
 		return intelligence.Observation{}, "", errors.New("observation time is required")
 	}
-	observation.ObservedAt = observation.ObservedAt.UTC()
+	observation.ObservedAt = observation.ObservedAt.UTC().Truncate(time.Microsecond)
 
 	for _, value := range []struct {
 		name  string

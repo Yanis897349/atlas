@@ -7,7 +7,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/intelligence"
 )
 
-// EventObservations returns bounded source observations for one canonical economic event.
+// EventObservations returns the bounded latest source observations for one canonical economic event.
 func (repository *Repository) EventObservations(
 	ctx context.Context,
 	eventID string,
@@ -60,7 +60,15 @@ FOR KEY SHARE`
 
 const eventObservationsSQL = `
 SELECT ` + observationColumns + `
-FROM economic_event_observations
-WHERE economic_event_id = $1
+FROM (
+    SELECT economic_event_observations.*,
+           row_number() OVER (
+               PARTITION BY source, source_observation_id
+               ORDER BY observed_at DESC, id ASC
+           ) AS revision_rank
+    FROM economic_event_observations
+    WHERE economic_event_id = $1
+) AS latest_observations
+WHERE revision_rank = 1
 ORDER BY observed_at DESC, id ASC
 LIMIT $2`

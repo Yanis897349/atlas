@@ -2,15 +2,13 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/Yanis897349/atlas/internal/intelligence"
-	"github.com/jackc/pgx/v5"
 )
 
-// StoreObservation inserts a source observation or replaces it with a newer snapshot.
-// Source identity and creation audit fields remain immutable after the first insert.
+// StoreObservation appends a newer changed source observation revision.
+// Unchanged, older, and equal-time snapshots return the latest stored revision.
 func (repository *Repository) StoreObservation(
 	ctx context.Context,
 	observation intelligence.Observation,
@@ -21,67 +19,112 @@ func (repository *Repository) StoreObservation(
 		return intelligence.StoredObservation{}, err
 	}
 
-	stored, err := scanObservation(repository.db.QueryRow(
-		ctx,
-		upsertObservationSQL,
-		observation.EconomicEventID,
-		observation.Source,
-		observation.SourceObservationID,
-		observation.SourceURL,
-		observation.ObservedAt,
-		observation.Consensus,
-		observation.Previous,
-		observation.Actual,
-		actor,
-	))
-	if err == nil {
-		return stored, nil
+	transaction, err := repository.db.Begin(ctx)
+	if err != nil {
+		return intelligence.StoredObservation{}, fmt.Errorf("begin economic event observation storage: %w", err)
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return intelligence.StoredObservation{}, fmt.Errorf("upsert economic event observation: %w", err)
+	defer func() { _ = transaction.Rollback(context.Background()) }()
+
+	var lockedEventID string
+	if err := transaction.QueryRow(
+		ctx,
+		lockEconomicEventForObservationStorageSQL,
+		observation.EconomicEventID,
+	).Scan(&lockedEventID); err != nil {
+		return intelligence.StoredObservation{}, fmt.Errorf("lock economic event for observation storage: %w", err)
 	}
 
-	stored, err = scanObservation(repository.db.QueryRow(
+	latestObservedAt, watermarkExists, err := loadObservationWatermark(
 		ctx,
-		selectObservationSQL,
-		observation.EconomicEventID,
+		transaction,
+		lockedEventID,
 		observation.Source,
 		observation.SourceObservationID,
-	))
+	)
 	if err != nil {
-		return intelligence.StoredObservation{}, fmt.Errorf("load unchanged economic event observation: %w", err)
+		return intelligence.StoredObservation{}, err
+	}
+
+	var stored intelligence.StoredObservation
+	if !watermarkExists {
+		stored, err = insertObservationRevision(
+			ctx,
+			transaction,
+			lockedEventID,
+			observation,
+			actor,
+		)
+		if err != nil {
+			return intelligence.StoredObservation{}, err
+		}
+		if err := insertObservationWatermark(
+			ctx,
+			transaction,
+			lockedEventID,
+			observation,
+			actor,
+		); err != nil {
+			return intelligence.StoredObservation{}, err
+		}
+	} else {
+		stored, err = loadLatestObservation(
+			ctx,
+			transaction,
+			lockedEventID,
+			observation.Source,
+			observation.SourceObservationID,
+		)
+		if err != nil {
+			return intelligence.StoredObservation{}, err
+		}
+
+		if observation.ObservedAt.After(latestObservedAt) {
+			if !sameObservationPayload(observation, stored.Observation) {
+				stored, err = insertObservationRevision(
+					ctx,
+					transaction,
+					lockedEventID,
+					observation,
+					actor,
+				)
+				if err != nil {
+					return intelligence.StoredObservation{}, err
+				}
+			}
+			if err := updateObservationWatermark(
+				ctx,
+				transaction,
+				lockedEventID,
+				observation,
+				actor,
+			); err != nil {
+				return intelligence.StoredObservation{}, err
+			}
+		}
+	}
+
+	if err := transaction.Commit(ctx); err != nil {
+		return intelligence.StoredObservation{}, fmt.Errorf("commit economic event observation storage: %w", err)
 	}
 	return stored, nil
 }
 
-const upsertObservationSQL = `
-INSERT INTO economic_event_observations (
-    economic_event_id,
-    source,
-    source_observation_id,
-    source_url,
-    observed_at,
-    consensus_value,
-    previous_value,
-    actual_value,
-    created_by,
-    updated_by
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-ON CONFLICT (economic_event_id, source, source_observation_id) DO UPDATE
-SET source_url = EXCLUDED.source_url,
-    observed_at = EXCLUDED.observed_at,
-    consensus_value = EXCLUDED.consensus_value,
-    previous_value = EXCLUDED.previous_value,
-    actual_value = EXCLUDED.actual_value,
-    updated_at = statement_timestamp(),
-    updated_by = EXCLUDED.updated_by
-WHERE EXCLUDED.observed_at > economic_event_observations.observed_at
-RETURNING ` + observationColumns
+func sameObservationPayload(left, right intelligence.Observation) bool {
+	return left.SourceURL == right.SourceURL &&
+		optionalStringEqual(left.Consensus, right.Consensus) &&
+		optionalStringEqual(left.Previous, right.Previous) &&
+		optionalStringEqual(left.Actual, right.Actual)
+}
 
-const selectObservationSQL = `
-SELECT ` + observationColumns + `
-FROM economic_event_observations
-WHERE economic_event_id = $1
-  AND source = $2
-  AND source_observation_id = $3`
+func optionalStringEqual(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+const lockEconomicEventForObservationStorageSQL = `
+SELECT id::text
+FROM economic_events
+WHERE id = $1
+FOR NO KEY UPDATE`

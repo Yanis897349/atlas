@@ -83,7 +83,7 @@ func TestRepositoryPreservesObservationDatabaseFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRepository() error = %v", err)
 	}
-	if _, err := repository.StoreObservation(t.Context(), validObservation(), "worker"); err == nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "upsert economic event observation") {
+	if _, err := repository.StoreObservation(t.Context(), validObservation(), "worker"); err == nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "begin economic event observation storage") {
 		t.Fatalf("StoreObservation() error = %v, want contextual database failure", err)
 	}
 	if _, err := repository.EventObservations(t.Context(), validEventID, 1); err == nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "begin economic event observation retrieval") {
