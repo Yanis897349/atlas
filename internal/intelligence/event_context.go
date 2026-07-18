@@ -83,6 +83,15 @@ func AssembleEventContext(
 				err,
 			)
 		}
+		if len(revisions) > 0 && revisions[0].ID != observation.ID {
+			return EventContext{}, fmt.Errorf(
+				"validate economic event observation revisions for source %q identity %q: latest revision %q does not match selected observation %q",
+				observation.Source,
+				observation.SourceObservationID,
+				revisions[0].ID,
+				observation.ID,
+			)
+		}
 		observationHistories = append(observationHistories, EventContextObservation{
 			Latest:    observation,
 			Revisions: revisions,
