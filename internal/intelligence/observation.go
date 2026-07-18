@@ -39,3 +39,8 @@ type ObservationWriter interface {
 type ObservationReader interface {
 	EventObservations(context.Context, string, int) ([]StoredObservation, error)
 }
+
+// ObservationRevisionReader retrieves revisions for one exact source observation identity.
+type ObservationRevisionReader interface {
+	ObservationRevisions(context.Context, string, string, string, int) ([]StoredObservation, error)
+}

@@ -75,3 +75,30 @@ func normalizeAndValidateEventObservationsQuery(eventID string, limit int) (stri
 	}
 	return normalized, nil
 }
+
+func normalizeAndValidateObservationRevisionsQuery(
+	eventID string,
+	source string,
+	sourceObservationID string,
+	limit int,
+) (string, string, string, error) {
+	normalizedEventID, valid := atlasuuid.Normalize(eventID)
+	if !valid {
+		return "", "", "", errors.New("economic event ID must be a UUID")
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return "", "", "", errors.New("source is required")
+	}
+	sourceObservationID = strings.TrimSpace(sourceObservationID)
+	if sourceObservationID == "" {
+		return "", "", "", errors.New("source observation ID is required")
+	}
+	if limit < 1 || limit > intelligence.MaxEventObservationsLimit {
+		return "", "", "", fmt.Errorf(
+			"limit must be between 1 and %d",
+			intelligence.MaxEventObservationsLimit,
+		)
+	}
+	return normalizedEventID, source, sourceObservationID, nil
+}

@@ -23,8 +23,9 @@ type Repository struct {
 }
 
 var (
-	_ intelligence.ObservationWriter = (*Repository)(nil)
-	_ intelligence.ObservationReader = (*Repository)(nil)
+	_ intelligence.ObservationWriter         = (*Repository)(nil)
+	_ intelligence.ObservationReader         = (*Repository)(nil)
+	_ intelligence.ObservationRevisionReader = (*Repository)(nil)
 )
 
 // NewRepository returns an economic-event intelligence repository backed by db.
