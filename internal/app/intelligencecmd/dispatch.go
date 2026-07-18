@@ -89,6 +89,7 @@ func Run(
 			ctx,
 			dependencies.Events,
 			dependencies.Observations,
+			dependencies.ObservationRevisions,
 			dependencies.Embedder,
 			dependencies.SourceRecords,
 			stdout,

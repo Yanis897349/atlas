@@ -31,6 +31,19 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 	observationResults[1].Actual = nil
 	events := &economicEventReaderStub{event: event}
 	observations := &observationReaderStub{results: observationResults}
+	observationRevisionResults := [][]StoredObservation{
+		{
+			observationResults[0],
+			storedObservationFixture(
+				"00000000-0000-0000-0000-000000000003",
+				event.ID,
+				"latest",
+				windowEnd.Add(-time.Hour).UTC(),
+			),
+		},
+		{},
+	}
+	observationRevisions := &observationRevisionReaderStub{results: observationRevisionResults}
 	embedder := &embedderStub{batch: search.EmbeddingBatch{
 		Provider: " openai ",
 		Model:    " embedding-model ",
@@ -41,14 +54,17 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 	}}
 	sources := &similarSourceRecordReaderStub{results: results}
 	query := EventContextQuery{
-		EventID:                "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
-		PublicationWindowStart: windowStart,
-		PublicationWindowEnd:   windowEnd,
-		SourceRecordLimit:      17,
-		ObservationLimit:       19,
+		EventID:                  "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+		PublicationWindowStart:   windowStart,
+		PublicationWindowEnd:     windowEnd,
+		SourceRecordLimit:        17,
+		ObservationLimit:         19,
+		ObservationRevisionLimit: 23,
 	}
 
-	got, err := AssembleEventContext(t.Context(), events, observations, embedder, sources, query)
+	got, err := AssembleEventContext(
+		t.Context(), events, observations, observationRevisions, embedder, sources, query,
+	)
 	if err != nil {
 		t.Fatalf("AssembleEventContext() error = %v", err)
 	}
@@ -56,8 +72,11 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 		Event:                  event,
 		PublicationWindowStart: windowStart.UTC(),
 		PublicationWindowEnd:   windowEnd.UTC(),
-		Observations:           observationResults,
-		SourceRecords:          results,
+		Observations: []EventContextObservation{
+			{Latest: observationResults[0], Revisions: observationRevisionResults[0]},
+			{Latest: observationResults[1], Revisions: observationRevisionResults[1]},
+		},
+		SourceRecords: results,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("AssembleEventContext() = %#v, want %#v", got, want)
@@ -72,6 +91,13 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 			observations.eventID,
 			observations.limit,
 		)
+	}
+	wantRevisionCalls := []observationRevisionReaderCall{
+		{eventID: event.ID, source: "official-statistics", sourceObservationID: "latest", limit: 23},
+		{eventID: event.ID, source: "official-statistics", sourceObservationID: "earlier", limit: 23},
+	}
+	if !reflect.DeepEqual(observationRevisions.calls, wantRevisionCalls) {
+		t.Errorf("observation revision retrieval = %#v, want %#v", observationRevisions.calls, wantRevisionCalls)
 	}
 	wantInputs := []search.EmbeddingInput{{SourceRecordID: "semantic-search-query", Text: event.Name}}
 	if embedder.calls != 1 || !reflect.DeepEqual(embedder.inputs, wantInputs) {
@@ -102,6 +128,7 @@ func TestAssembleEventContextPreservesNonNilEmptySourceResults(t *testing.T) {
 		t.Context(),
 		&economicEventReaderStub{event: storedEventFixture(validEventID, "Inflation")},
 		&observationReaderStub{results: []StoredObservation{}},
+		&observationRevisionReaderStub{},
 		&embedderStub{batch: validEmbeddingBatch()},
 		&similarSourceRecordReaderStub{results: want},
 		validEventContextQuery(),
@@ -115,11 +142,12 @@ func TestAssembleEventContextPreservesNonNilEmptySourceResults(t *testing.T) {
 }
 
 func TestAssembleEventContextPreservesNonNilEmptyObservationResults(t *testing.T) {
-	want := []StoredObservation{}
+	want := []EventContextObservation{}
 	got, err := AssembleEventContext(
 		t.Context(),
 		&economicEventReaderStub{event: storedEventFixture(validEventID, "Inflation")},
-		&observationReaderStub{results: want},
+		&observationReaderStub{results: []StoredObservation{}},
+		&observationRevisionReaderStub{},
 		&embedderStub{batch: validEmbeddingBatch()},
 		&similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}},
 		validEventContextQuery(),
@@ -153,6 +181,9 @@ func TestAssembleEventContextRejectsInvalidInputBeforeDependencies(t *testing.T)
 		{name: "zero observation limit", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.ObservationLimit = 0 }), contains: "observation limit must be between"},
 		{name: "negative observation limit", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.ObservationLimit = -1 }), contains: "observation limit must be between"},
 		{name: "observation limit above maximum", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.ObservationLimit = MaxEventObservationsLimit + 1 }), contains: "observation limit must be between"},
+		{name: "zero observation revision limit", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.ObservationRevisionLimit = 0 }), contains: "observation revision limit must be between"},
+		{name: "negative observation revision limit", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.ObservationRevisionLimit = -1 }), contains: "observation revision limit must be between"},
+		{name: "observation revision limit above maximum", query: withEventContextQuery(valid, func(query *EventContextQuery) { query.ObservationRevisionLimit = MaxEventObservationsLimit + 1 }), contains: "observation revision limit must be between"},
 	}
 
 	for _, test := range tests {
@@ -161,6 +192,7 @@ func TestAssembleEventContextRejectsInvalidInputBeforeDependencies(t *testing.T)
 				t.Context(),
 				panicEconomicEventReader{},
 				panicObservationReader{},
+				panicObservationRevisionReader{},
 				panicEmbedder{},
 				panicSimilarSourceRecordReader{},
 				test.query,
@@ -181,6 +213,7 @@ func TestAssembleEventContextPreservesDependencyFailures(t *testing.T) {
 		name           string
 		eventErr       error
 		observationErr error
+		revisionErr    error
 		embedErr       error
 		sourcesErr     error
 		contains       string
@@ -190,6 +223,8 @@ func TestAssembleEventContextPreservesDependencyFailures(t *testing.T) {
 		{name: "event cancellation", eventErr: context.Canceled, contains: "retrieve economic event"},
 		{name: "observation repository", observationErr: errors.New("observations unavailable"), contains: "retrieve economic event observations"},
 		{name: "observation cancellation", observationErr: context.Canceled, contains: "retrieve economic event observations"},
+		{name: "observation revision repository", revisionErr: errors.New("revisions unavailable"), contains: "retrieve economic event observation revisions"},
+		{name: "observation revision cancellation", revisionErr: context.Canceled, contains: "retrieve economic event observation revisions"},
 		{name: "embedding provider", embedErr: errors.New("provider unavailable"), contains: "embed semantic search query with provider"},
 		{name: "embedding cancellation", embedErr: context.Canceled, contains: "embed semantic search query with provider"},
 		{name: "source repository", sourcesErr: errors.New("search unavailable"), contains: "retrieve similar source records"},
@@ -202,19 +237,32 @@ func TestAssembleEventContextPreservesDependencyFailures(t *testing.T) {
 				event: storedEventFixture(validEventID, "Inflation"),
 				err:   test.eventErr,
 			}
+			observationResults := []StoredObservation{}
+			if test.revisionErr != nil {
+				observationResults = []StoredObservation{storedObservationFixture(
+					"00000000-0000-0000-0000-000000000004",
+					validEventID,
+					"revision-failure",
+					time.Now(),
+				)}
+			}
 			observations := &observationReaderStub{
-				results: []StoredObservation{},
+				results: observationResults,
 				err:     test.observationErr,
 			}
+			observationRevisions := &observationRevisionReaderStub{err: test.revisionErr}
 			embedder := &embedderStub{batch: validEmbeddingBatch(), err: test.embedErr}
 			sources := &similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}, err: test.sourcesErr}
 
 			got, err := AssembleEventContext(
-				t.Context(), events, observations, embedder, sources, validEventContextQuery(),
+				t.Context(), events, observations, observationRevisions, embedder, sources, validEventContextQuery(),
 			)
 			wantErr := test.eventErr
 			if wantErr == nil {
 				wantErr = test.observationErr
+			}
+			if wantErr == nil {
+				wantErr = test.revisionErr
 			}
 			if wantErr == nil {
 				wantErr = test.embedErr
@@ -223,7 +271,7 @@ func TestAssembleEventContextPreservesDependencyFailures(t *testing.T) {
 				wantErr = test.sourcesErr
 			}
 			if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), test.contains) ||
-				!strings.Contains(err.Error(), failureContext(test.eventErr, test.observationErr)) {
+				!strings.Contains(err.Error(), failureContext(test.eventErr, test.observationErr, test.revisionErr)) {
 				t.Fatalf("AssembleEventContext() error = %v, want contextual %v", err, wantErr)
 			}
 			if !reflect.DeepEqual(got, EventContext{}) {
@@ -244,6 +292,13 @@ func TestAssembleEventContextPreservesDependencyFailures(t *testing.T) {
 					sources.calls,
 				)
 			}
+			if test.revisionErr != nil && (embedder.calls != 0 || sources.calls != 0) {
+				t.Errorf(
+					"downstream calls after observation revision failure = (%d, %d), want none",
+					embedder.calls,
+					sources.calls,
+				)
+			}
 			if test.embedErr != nil && sources.calls != 0 {
 				t.Errorf("source calls after embedding failure = %d, want none", sources.calls)
 			}
@@ -256,6 +311,7 @@ func TestAssembleEventContextPreservesMalformedEmbeddingFailure(t *testing.T) {
 		t.Context(),
 		&economicEventReaderStub{event: storedEventFixture(validEventID, "Inflation")},
 		&observationReaderStub{results: []StoredObservation{}},
+		&observationRevisionReaderStub{},
 		&embedderStub{batch: search.EmbeddingBatch{Provider: "provider", Model: "model"}},
 		panicSimilarSourceRecordReader{},
 		validEventContextQuery(),
@@ -274,11 +330,12 @@ const validEventID = "00000000-0000-0000-0000-000000000083"
 func validEventContextQuery() EventContextQuery {
 	windowStart := time.Date(2026, time.July, 10, 8, 0, 0, 0, time.UTC)
 	return EventContextQuery{
-		EventID:                validEventID,
-		PublicationWindowStart: windowStart,
-		PublicationWindowEnd:   windowStart.Add(24 * time.Hour),
-		SourceRecordLimit:      20,
-		ObservationLimit:       10,
+		EventID:                  validEventID,
+		PublicationWindowStart:   windowStart,
+		PublicationWindowEnd:     windowStart.Add(24 * time.Hour),
+		SourceRecordLimit:        20,
+		ObservationLimit:         10,
+		ObservationRevisionLimit: 10,
 	}
 }
 
@@ -366,12 +423,15 @@ func validEmbeddingBatch() search.EmbeddingBatch {
 	}
 }
 
-func failureContext(eventErr, observationErr error) string {
+func failureContext(eventErr, observationErr, revisionErr error) string {
 	if eventErr != nil {
 		return "retrieve economic event"
 	}
 	if observationErr != nil {
 		return "retrieve economic event observations"
+	}
+	if revisionErr != nil {
+		return "retrieve economic event observation revisions"
 	}
 	return "retrieve economic event source records"
 }
@@ -395,6 +455,39 @@ type observationReaderStub struct {
 	calls   int
 	eventID string
 	limit   int
+}
+
+type observationRevisionReaderCall struct {
+	eventID             string
+	source              string
+	sourceObservationID string
+	limit               int
+}
+
+type observationRevisionReaderStub struct {
+	results [][]StoredObservation
+	err     error
+	calls   []observationRevisionReaderCall
+}
+
+func (reader *observationRevisionReaderStub) ObservationRevisions(
+	_ context.Context,
+	eventID string,
+	source string,
+	sourceObservationID string,
+	limit int,
+) ([]StoredObservation, error) {
+	reader.calls = append(reader.calls, observationRevisionReaderCall{
+		eventID: eventID, source: source, sourceObservationID: sourceObservationID, limit: limit,
+	})
+	if reader.err != nil {
+		return nil, reader.err
+	}
+	index := len(reader.calls) - 1
+	if index >= len(reader.results) {
+		return []StoredObservation{}, nil
+	}
+	return reader.results[index], nil
 }
 
 func (reader *observationReaderStub) EventObservations(
@@ -459,6 +552,18 @@ type panicObservationReader struct{}
 
 func (panicObservationReader) EventObservations(context.Context, string, int) ([]StoredObservation, error) {
 	panic("observation retrieval must not run")
+}
+
+type panicObservationRevisionReader struct{}
+
+func (panicObservationRevisionReader) ObservationRevisions(
+	context.Context,
+	string,
+	string,
+	string,
+	int,
+) ([]StoredObservation, error) {
+	panic("observation revision retrieval must not run")
 }
 
 type panicEmbedder struct{}

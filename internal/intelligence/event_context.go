@@ -14,11 +14,18 @@ import (
 
 // EventContextQuery selects one economic event, its observations, and its related source-record window.
 type EventContextQuery struct {
-	EventID                string
-	PublicationWindowStart time.Time
-	PublicationWindowEnd   time.Time
-	SourceRecordLimit      int
-	ObservationLimit       int
+	EventID                  string
+	PublicationWindowStart   time.Time
+	PublicationWindowEnd     time.Time
+	SourceRecordLimit        int
+	ObservationLimit         int
+	ObservationRevisionLimit int
+}
+
+// EventContextObservation contains one latest observation and its bounded immutable revisions.
+type EventContextObservation struct {
+	Latest    StoredObservation
+	Revisions []StoredObservation
 }
 
 // EventContext contains one canonical event, its observations, and semantically related source records.
@@ -26,7 +33,7 @@ type EventContext struct {
 	Event                  calendar.StoredEvent
 	PublicationWindowStart time.Time
 	PublicationWindowEnd   time.Time
-	Observations           []StoredObservation
+	Observations           []EventContextObservation
 	SourceRecords          []search.SimilarSourceRecord
 }
 
@@ -40,6 +47,7 @@ func AssembleEventContext(
 	ctx context.Context,
 	events EconomicEventReader,
 	observations ObservationReader,
+	observationRevisions ObservationRevisionReader,
 	embedder search.Embedder,
 	sourceRecords search.SimilarSourceRecordReader,
 	query EventContextQuery,
@@ -57,6 +65,28 @@ func AssembleEventContext(
 	eventObservations, err := observations.EventObservations(ctx, event.ID, query.ObservationLimit)
 	if err != nil {
 		return EventContext{}, fmt.Errorf("retrieve economic event observations: %w", err)
+	}
+	observationHistories := make([]EventContextObservation, 0, len(eventObservations))
+	for _, observation := range eventObservations {
+		revisions, err := observationRevisions.ObservationRevisions(
+			ctx,
+			event.ID,
+			observation.Source,
+			observation.SourceObservationID,
+			query.ObservationRevisionLimit,
+		)
+		if err != nil {
+			return EventContext{}, fmt.Errorf(
+				"retrieve economic event observation revisions for source %q identity %q: %w",
+				observation.Source,
+				observation.SourceObservationID,
+				err,
+			)
+		}
+		observationHistories = append(observationHistories, EventContextObservation{
+			Latest:    observation,
+			Revisions: revisions,
+		})
 	}
 
 	filters := search.SimilarSourceRecordFilters{
@@ -79,7 +109,7 @@ func AssembleEventContext(
 		Event:                  event,
 		PublicationWindowStart: query.PublicationWindowStart,
 		PublicationWindowEnd:   query.PublicationWindowEnd,
-		Observations:           eventObservations,
+		Observations:           observationHistories,
 		SourceRecords:          records,
 	}, nil
 }
@@ -107,6 +137,12 @@ func normalizeAndValidateEventContextQuery(query EventContextQuery) (EventContex
 	if query.ObservationLimit < 1 || query.ObservationLimit > MaxEventObservationsLimit {
 		return EventContextQuery{}, fmt.Errorf(
 			"observation limit must be between 1 and %d",
+			MaxEventObservationsLimit,
+		)
+	}
+	if query.ObservationRevisionLimit < 1 || query.ObservationRevisionLimit > MaxEventObservationsLimit {
+		return EventContextQuery{}, fmt.Errorf(
+			"observation revision limit must be between 1 and %d",
 			MaxEventObservationsLimit,
 		)
 	}

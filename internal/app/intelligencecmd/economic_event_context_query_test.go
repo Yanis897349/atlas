@@ -15,6 +15,7 @@ func TestParseEconomicEventContextNormalizesInput(t *testing.T) {
 		"--event-id", "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
 		"--from", "2026-07-12T08:00:00Z",
 		"--observation-limit", "17",
+		"--observation-revision-limit", "13",
 	})
 	if err != nil || !recognized {
 		t.Fatalf("Parse() = (%#v, %t, %v), want recognized command", command, recognized, err)
@@ -26,7 +27,8 @@ func TestParseEconomicEventContextNormalizesInput(t *testing.T) {
 		command.eventContextQuery.PublicationWindowStart != wantStart ||
 		command.eventContextQuery.PublicationWindowEnd != wantEnd ||
 		command.eventContextQuery.SourceRecordLimit != 24 ||
-		command.eventContextQuery.ObservationLimit != 17 {
+		command.eventContextQuery.ObservationLimit != 17 ||
+		command.eventContextQuery.ObservationRevisionLimit != 13 {
 		t.Errorf("command = %#v, want normalized complete query", command)
 	}
 }
@@ -50,6 +52,7 @@ func TestParseRejectsInvalidEconomicEventContextArguments(t *testing.T) {
 		{name: "missing to", arguments: withoutFlag(valid, "--to"), contains: "--to is required"},
 		{name: "missing limit", arguments: withoutFlag(valid, "--limit"), contains: "--limit is required"},
 		{name: "missing observation limit", arguments: withoutFlag(valid, "--observation-limit"), contains: "--observation-limit is required"},
+		{name: "missing observation revision limit", arguments: withoutFlag(valid, "--observation-revision-limit"), contains: "--observation-revision-limit is required"},
 		{name: "malformed event ID", arguments: replaceFlag(valid, "--event-id", "not-a-uuid"), contains: "--event-id must be a UUID"},
 		{name: "invalid event ID separators", arguments: replaceFlag(valid, "--event-id", "00000000X0000X0000X0000X000000000085"), contains: "--event-id must be a UUID"},
 		{name: "malformed from", arguments: replaceFlag(valid, "--from", "today"), contains: "--from must be RFC3339"},
@@ -64,11 +67,16 @@ func TestParseRejectsInvalidEconomicEventContextArguments(t *testing.T) {
 		{name: "zero observation limit", arguments: replaceFlag(valid, "--observation-limit", "0"), contains: "--observation-limit must be between 1 and 100"},
 		{name: "negative observation limit", arguments: replaceFlag(valid, "--observation-limit", "-1"), contains: "--observation-limit must be between 1 and 100"},
 		{name: "high observation limit", arguments: replaceFlag(valid, "--observation-limit", "101"), contains: "--observation-limit must be between 1 and 100"},
+		{name: "nonnumeric observation revision limit", arguments: replaceFlag(valid, "--observation-revision-limit", "many"), contains: "--observation-revision-limit must be between 1 and 100"},
+		{name: "zero observation revision limit", arguments: replaceFlag(valid, "--observation-revision-limit", "0"), contains: "--observation-revision-limit must be between 1 and 100"},
+		{name: "negative observation revision limit", arguments: replaceFlag(valid, "--observation-revision-limit", "-1"), contains: "--observation-revision-limit must be between 1 and 100"},
+		{name: "high observation revision limit", arguments: replaceFlag(valid, "--observation-revision-limit", "101"), contains: "--observation-revision-limit must be between 1 and 100"},
 		{name: "repeated event ID", arguments: append(valid, "--event-id", validEventID), contains: "must only be provided once"},
 		{name: "repeated from", arguments: append(valid, "--from", "2026-07-12T09:00:00Z"), contains: "must only be provided once"},
 		{name: "repeated to", arguments: append(valid, "--to", "2026-07-12T13:00:00Z"), contains: "must only be provided once"},
 		{name: "repeated limit", arguments: append(valid, "--limit", "2"), contains: "must only be provided once"},
 		{name: "repeated observation limit", arguments: append(valid, "--observation-limit", "2"), contains: "must only be provided once"},
+		{name: "repeated observation revision limit", arguments: append(valid, "--observation-revision-limit", "2"), contains: "must only be provided once"},
 		{name: "unknown flag", arguments: append(valid, "--format", "yaml"), contains: "flag provided but not defined"},
 		{name: "positional argument", arguments: append(valid, "extra"), contains: "unexpected positional arguments"},
 	}
@@ -103,6 +111,7 @@ func validEconomicEventContextArguments() []string {
 		"--to", "2026-07-12T12:00:00Z",
 		"--limit", "10",
 		"--observation-limit", "10",
+		"--observation-revision-limit", "10",
 	}
 }
 

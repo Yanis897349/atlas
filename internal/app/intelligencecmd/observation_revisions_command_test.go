@@ -142,7 +142,16 @@ func TestRunObservationRevisionsPreservesFailuresWithoutSuccessOutput(t *testing
 
 type observationRevisionReaderStub struct {
 	results             []intelligence.StoredObservation
+	resultsByCall       [][]intelligence.StoredObservation
 	err                 error
+	eventID             string
+	source              string
+	sourceObservationID string
+	limit               int
+	calls               []observationRevisionReaderInput
+}
+
+type observationRevisionReaderInput struct {
 	eventID             string
 	source              string
 	sourceObservationID string
@@ -160,5 +169,14 @@ func (reader *observationRevisionReaderStub) ObservationRevisions(
 	reader.source = source
 	reader.sourceObservationID = sourceObservationID
 	reader.limit = limit
+	reader.calls = append(reader.calls, observationRevisionReaderInput{
+		eventID: eventID, source: source, sourceObservationID: sourceObservationID, limit: limit,
+	})
+	if reader.err != nil {
+		return nil, reader.err
+	}
+	if reader.resultsByCall != nil {
+		return reader.resultsByCall[len(reader.calls)-1], nil
+	}
 	return reader.results, reader.err
 }

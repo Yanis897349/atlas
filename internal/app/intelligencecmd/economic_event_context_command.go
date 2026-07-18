@@ -13,11 +13,16 @@ import (
 )
 
 type economicEventContextOutput struct {
-	Event                  economicEventOutput              `json:"event"`
-	PublicationWindowStart string                           `json:"publication_window_start"`
-	PublicationWindowEnd   string                           `json:"publication_window_end"`
-	Observations           []economicEventObservationOutput `json:"observations"`
-	SourceRecords          []economicEventSourceOutput      `json:"source_records"`
+	Event                  economicEventOutput                     `json:"event"`
+	PublicationWindowStart string                                  `json:"publication_window_start"`
+	PublicationWindowEnd   string                                  `json:"publication_window_end"`
+	Observations           []economicEventContextObservationOutput `json:"observations"`
+	SourceRecords          []economicEventSourceOutput             `json:"source_records"`
+}
+
+type economicEventContextObservationOutput struct {
+	economicEventObservationOutput
+	Revisions []economicEventObservationOutput `json:"revisions"`
 }
 
 type economicEventOutput struct {
@@ -57,6 +62,7 @@ func runEconomicEventContext(
 	ctx context.Context,
 	events intelligence.EconomicEventReader,
 	observations intelligence.ObservationReader,
+	observationRevisions intelligence.ObservationRevisionReader,
 	embedder search.Embedder,
 	sourceRecords search.SimilarSourceRecordReader,
 	stdout io.Writer,
@@ -66,6 +72,7 @@ func runEconomicEventContext(
 		ctx,
 		events,
 		observations,
+		observationRevisions,
 		embedder,
 		sourceRecords,
 		query,
@@ -78,11 +85,25 @@ func runEconomicEventContext(
 		Event:                  newEconomicEventOutput(assembled.Event),
 		PublicationWindowStart: output.FormatTime(assembled.PublicationWindowStart),
 		PublicationWindowEnd:   output.FormatTime(assembled.PublicationWindowEnd),
-		Observations:           make([]economicEventObservationOutput, 0, len(assembled.Observations)),
+		Observations:           make([]economicEventContextObservationOutput, 0, len(assembled.Observations)),
 		SourceRecords:          make([]economicEventSourceOutput, 0, len(assembled.SourceRecords)),
 	}
 	for _, observation := range assembled.Observations {
-		result.Observations = append(result.Observations, newEconomicEventObservationOutput(observation))
+		encodedObservation := economicEventContextObservationOutput{
+			economicEventObservationOutput: newEconomicEventObservationOutput(observation.Latest),
+			Revisions: make(
+				[]economicEventObservationOutput,
+				0,
+				len(observation.Revisions),
+			),
+		}
+		for _, revision := range observation.Revisions {
+			encodedObservation.Revisions = append(
+				encodedObservation.Revisions,
+				newEconomicEventObservationOutput(revision),
+			)
+		}
+		result.Observations = append(result.Observations, encodedObservation)
 	}
 	for _, match := range assembled.SourceRecords {
 		record := match.SourceRecord

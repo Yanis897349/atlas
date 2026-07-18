@@ -111,6 +111,38 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		}
 		storedObservations[fixture.SourceObservationID] = stored
 	}
+	officialInitial := storedObservations["cpi-2026-07"]
+	officialCitationInput := officialInitial.Observation
+	officialCitationInput.SourceURL = "https://example.com/releases/cpi-2026-07-corrected"
+	officialCitationInput.ObservedAt = windowEnd.Add(2*time.Hour + 20*time.Minute)
+	officialCitation, err := observationRepository.StoreObservation(
+		t.Context(), officialCitationInput, "observation-citation-correction",
+	)
+	if err != nil {
+		t.Fatalf("StoreObservation(official citation revision) error = %v", err)
+	}
+	officialLatestInput := officialCitationInput
+	officialLatestInput.ObservedAt = windowEnd.Add(2*time.Hour + 40*time.Minute)
+	officialLatestInput.Consensus = nil
+	officialLatest, err := observationRepository.StoreObservation(
+		t.Context(), officialLatestInput, "observation-value-correction",
+	)
+	if err != nil {
+		t.Fatalf("StoreObservation(official latest revision) error = %v", err)
+	}
+	storedObservations["cpi-2026-07"] = officialLatest
+
+	latestInitial := storedObservations["cpi-latest-2026-07"]
+	latestRevisionInput := latestInitial.Observation
+	latestRevisionInput.SourceURL = "https://example.com/releases/cpi-latest-2026-07-corrected"
+	latestRevisionInput.ObservedAt = windowEnd.Add(3*time.Hour + 20*time.Minute)
+	latestRevision, err := observationRepository.StoreObservation(
+		t.Context(), latestRevisionInput, "latest-observation-correction",
+	)
+	if err != nil {
+		t.Fatalf("StoreObservation(latest identity revision) error = %v", err)
+	}
+	storedObservations["cpi-latest-2026-07"] = latestRevision
 
 	sourceRepository, err := ingestionpostgres.NewRepository(database.Pool)
 	if err != nil {
@@ -211,6 +243,7 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		"--to", windowEnd.Format(time.RFC3339Nano),
 		"--limit", "4",
 		"--observation-limit", "2",
+		"--observation-revision-limit", "2",
 	}
 	if err := Run(t.Context(), arguments, dependencies); err != nil {
 		t.Fatalf("Run(economic-event-context) error = %v", err)
@@ -247,16 +280,46 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	}
 	for index, wantID := range wantObservationIDs {
 		got := output.Observations[index]
+		want := storedObservations[got.SourceObservationID]
 		if got.ID != wantID || got.EconomicEventID != event.ID || got.Source == "" ||
 			got.SourceObservationID == "" || got.SourceURL == "" || got.ObservedAt == "" ||
-			got.CreatedAt == "" || got.UpdatedAt == "" || got.CreatedBy != "observation-ingestion" ||
-			got.UpdatedBy != "observation-ingestion" {
+			got.CreatedAt == "" || got.UpdatedAt == "" || got.CreatedBy != want.CreatedBy ||
+			got.UpdatedBy != want.UpdatedBy {
 			t.Errorf("observations[%d] = %#v, want complete canonical observation %q", index, got, wantID)
+		}
+	}
+	if len(output.Observations[0].Revisions) != 2 ||
+		output.Observations[0].Revisions[0].ID != latestRevision.ID ||
+		output.Observations[0].Revisions[1].ID != latestInitial.ID ||
+		output.Observations[0].Revisions[0].SourceURL != latestRevision.SourceURL ||
+		output.Observations[0].Revisions[0].CreatedBy != "latest-observation-correction" ||
+		output.Observations[0].Revisions[0].Previous == nil ||
+		*output.Observations[0].Revisions[0].Previous != previous ||
+		output.Observations[0].Revisions[0].Consensus != nil ||
+		output.Observations[0].Revisions[0].Actual != nil {
+		t.Errorf("latest identity revisions = %#v, want complete newest-first bounded history", output.Observations[0].Revisions)
+	}
+	if len(output.Observations[1].Revisions) != 2 ||
+		output.Observations[1].Revisions[0].ID != officialLatest.ID ||
+		output.Observations[1].Revisions[1].ID != officialCitation.ID ||
+		output.Observations[1].Revisions[0].Consensus != nil ||
+		output.Observations[1].Revisions[0].Actual == nil ||
+		*output.Observations[1].Revisions[0].Actual != actual ||
+		output.Observations[1].Revisions[0].SourceURL != officialLatest.SourceURL ||
+		output.Observations[1].Revisions[0].CreatedAt == "" ||
+		output.Observations[1].Revisions[0].UpdatedAt == "" ||
+		output.Observations[1].Revisions[0].CreatedBy != "observation-value-correction" ||
+		output.Observations[1].Revisions[1].CreatedBy != "observation-citation-correction" {
+		t.Errorf("official revisions = %#v, want complete exact newest-first bounded history", output.Observations[1].Revisions)
+	}
+	for _, revision := range output.Observations[1].Revisions {
+		if revision.ID == officialInitial.ID {
+			t.Errorf("official revisions included %q beyond per-identity limit", officialInitial.ID)
 		}
 	}
 	if output.Observations[0].Consensus != nil || output.Observations[0].Actual != nil ||
 		output.Observations[0].Previous == nil || *output.Observations[0].Previous != previous ||
-		output.Observations[1].Consensus == nil || *output.Observations[1].Consensus != consensus ||
+		output.Observations[1].Consensus != nil ||
 		output.Observations[1].Previous == nil || *output.Observations[1].Previous != previous ||
 		output.Observations[1].Actual == nil || *output.Observations[1].Actual != actual {
 		t.Errorf("observation values = %#v, want exact nullable values", output.Observations)
@@ -310,6 +373,23 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	}
 }
 
+type economicEventContextIntegrationObservation struct {
+	ID                  string                                       `json:"id"`
+	EconomicEventID     string                                       `json:"economic_event_id"`
+	Source              string                                       `json:"source"`
+	SourceObservationID string                                       `json:"source_observation_id"`
+	SourceURL           string                                       `json:"source_url"`
+	ObservedAt          string                                       `json:"observed_at"`
+	Consensus           *string                                      `json:"consensus"`
+	Previous            *string                                      `json:"previous"`
+	Actual              *string                                      `json:"actual"`
+	CreatedAt           string                                       `json:"created_at"`
+	UpdatedAt           string                                       `json:"updated_at"`
+	CreatedBy           string                                       `json:"created_by"`
+	UpdatedBy           string                                       `json:"updated_by"`
+	Revisions           []economicEventContextIntegrationObservation `json:"revisions"`
+}
+
 type economicEventContextIntegrationOutput struct {
 	Event struct {
 		ID              string             `json:"id"`
@@ -326,24 +406,10 @@ type economicEventContextIntegrationOutput struct {
 		CreatedBy       string             `json:"created_by"`
 		UpdatedBy       string             `json:"updated_by"`
 	} `json:"event"`
-	PublicationWindowStart string `json:"publication_window_start"`
-	PublicationWindowEnd   string `json:"publication_window_end"`
-	Observations           []struct {
-		ID                  string  `json:"id"`
-		EconomicEventID     string  `json:"economic_event_id"`
-		Source              string  `json:"source"`
-		SourceObservationID string  `json:"source_observation_id"`
-		SourceURL           string  `json:"source_url"`
-		ObservedAt          string  `json:"observed_at"`
-		Consensus           *string `json:"consensus"`
-		Previous            *string `json:"previous"`
-		Actual              *string `json:"actual"`
-		CreatedAt           string  `json:"created_at"`
-		UpdatedAt           string  `json:"updated_at"`
-		CreatedBy           string  `json:"created_by"`
-		UpdatedBy           string  `json:"updated_by"`
-	} `json:"observations"`
-	SourceRecords []struct {
+	PublicationWindowStart string                                       `json:"publication_window_start"`
+	PublicationWindowEnd   string                                       `json:"publication_window_end"`
+	Observations           []economicEventContextIntegrationObservation `json:"observations"`
+	SourceRecords          []struct {
 		ID             string  `json:"id"`
 		Source         string  `json:"source"`
 		SourceItemID   string  `json:"source_item_id"`
