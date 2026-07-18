@@ -15,7 +15,7 @@ import (
 	"github.com/Yanis897349/atlas/internal/dailybrief"
 )
 
-const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|ingest-bls-observations|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|link-watchlist-events|unlink-watchlist-event|watchlist-events|index-source-records|search-source-records|economic-event-context>"
+const commandUsage = "usage: atlas <migrate|ingest-rss|ingest-bls|ingest-fed|ingest-ecb|ingest-bea|ingest-census|ingest-eurostat|ingest-spglobal|ingest-bls-observations|upcoming-events|daily-brief-input|daily-brief|daily-briefs|create-watchlist|update-watchlist|delete-watchlist|watchlist|watchlists|link-watchlist-event|link-watchlist-events|unlink-watchlist-event|watchlist-events|index-source-records|search-source-records|economic-event-context|economic-event-observation-revisions>"
 
 type command struct {
 	name                     string

@@ -12,19 +12,21 @@ import (
 
 // Command is one validated intelligence command.
 type Command struct {
-	name                 string
-	eventContextQuery    intelligence.EventContextQuery
-	observationIngestion ingestBLSObservationsCommand
+	name                      string
+	eventContextQuery         intelligence.EventContextQuery
+	observationIngestion      ingestBLSObservationsCommand
+	observationRevisionsQuery observationRevisionsQuery
 }
 
 // Dependencies contains the domain dependencies used by intelligence commands.
 type Dependencies struct {
-	Events             intelligence.EconomicEventReader
-	Observations       intelligence.ObservationReader
-	ObservationWriter  intelligence.ObservationWriter
-	ObservationAdapter intelligence.ObservationAdapter
-	Embedder           search.Embedder
-	SourceRecords      search.SimilarSourceRecordReader
+	Events               intelligence.EconomicEventReader
+	Observations         intelligence.ObservationReader
+	ObservationRevisions intelligence.ObservationRevisionReader
+	ObservationWriter    intelligence.ObservationWriter
+	ObservationAdapter   intelligence.ObservationAdapter
+	Embedder             search.Embedder
+	SourceRecords        search.SimilarSourceRecordReader
 }
 
 // Parse recognizes and validates one intelligence command.
@@ -39,6 +41,12 @@ func Parse(arguments []string) (Command, bool, error) {
 			return Command{}, true, err
 		}
 		return Command{name: arguments[0], eventContextQuery: query}, true, nil
+	case "economic-event-observation-revisions":
+		query, err := parseObservationRevisionsQuery(arguments[1:])
+		if err != nil {
+			return Command{}, true, err
+		}
+		return Command{name: arguments[0], observationRevisionsQuery: query}, true, nil
 	case "ingest-bls-observations":
 		query, err := parseIngestBLSObservationsCommand(arguments[1:])
 		if err != nil {
@@ -85,6 +93,13 @@ func Run(
 			dependencies.SourceRecords,
 			stdout,
 			command.eventContextQuery,
+		)
+	case "economic-event-observation-revisions":
+		return runObservationRevisions(
+			ctx,
+			dependencies.ObservationRevisions,
+			stdout,
+			command.observationRevisionsQuery,
 		)
 	case "ingest-bls-observations":
 		return runIngestBLSObservations(

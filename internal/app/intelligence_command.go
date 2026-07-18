@@ -65,11 +65,12 @@ func runIntelligenceCommand(
 		return fmt.Errorf("configure economic event observation repository: %w", err)
 	}
 	commandDependencies := intelligencecmd.Dependencies{
-		Events:             eventRepository,
-		Observations:       observationRepository,
-		ObservationWriter:  observationRepository,
-		ObservationAdapter: observationAdapter,
-		Embedder:           embedder,
+		Events:               eventRepository,
+		Observations:         observationRepository,
+		ObservationRevisions: observationRepository,
+		ObservationWriter:    observationRepository,
+		ObservationAdapter:   observationAdapter,
+		Embedder:             embedder,
 	}
 	if command.RequiresEventContextRepositories() {
 		semanticRepository, err := searchpostgres.NewRepository(pool)
