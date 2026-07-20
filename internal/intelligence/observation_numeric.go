@@ -127,3 +127,15 @@ func observationNumericSurprise(consensus, actual *string) (*string, *SurpriseDi
 	}
 	return surprise, &direction
 }
+
+func observationNumericActualChange(previous, actual *string) *string {
+	if previous == nil || actual == nil {
+		return nil
+	}
+
+	change, valid := observationNumericDelta(*previous, *actual)
+	if !valid {
+		return nil
+	}
+	return change
+}

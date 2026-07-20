@@ -66,6 +66,7 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 	}
 	wantSurprise := "+0.1%"
 	wantSurpriseDirection := SurpriseDirectionAboveConsensus
+	wantActualChange := "+0.2%"
 	want := EventContext{
 		Event:                  event,
 		PublicationWindowStart: windowStart.UTC(),
@@ -75,6 +76,7 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 				Latest:            observationResults[0],
 				Surprise:          &wantSurprise,
 				SurpriseDirection: &wantSurpriseDirection,
+				ActualChange:      &wantActualChange,
 				Revisions:         observationRevisionResults[0],
 				Comparisons:       compareObservationRevisions(observationRevisionResults[0]),
 			},

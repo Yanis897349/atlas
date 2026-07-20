@@ -163,6 +163,77 @@ func TestObservationNumericSurpriseIsUnavailableForMissingUnsupportedOrIncompati
 	}
 }
 
+func TestObservationNumericActualChangeCalculatesCompatibleValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		previous string
+		actual   string
+		want     string
+	}{
+		{name: "positive percent", previous: "3.10%", actual: "3.3%", want: "+0.2%"},
+		{name: "negative percent", previous: "3.3%", actual: "3.10%", want: "-0.2%"},
+		{name: "zero percent", previous: "+0.00%", actual: "-0.0%", want: "0%"},
+		{name: "positive unitless", previous: "100", actual: "125.50", want: "+25.5"},
+		{name: "negative unitless", previous: "125.50", actual: "100", want: "-25.5"},
+		{name: "zero unitless", previous: "+1.0", actual: "1.00", want: "0"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := observationNumericActualChange(
+				observationNumericTestValue(test.previous),
+				observationNumericTestValue(test.actual),
+			)
+			if got == nil || *got != test.want {
+				t.Fatalf(
+					"observationNumericActualChange(%q, %q) = %v, want %q",
+					test.previous,
+					test.actual,
+					got,
+					test.want,
+				)
+			}
+		})
+	}
+}
+
+func TestObservationNumericActualChangeIsUnavailableForMissingUnsupportedOrIncompatibleValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		previous *string
+		actual   *string
+	}{
+		{name: "missing previous", actual: observationNumericTestValue("3.2%")},
+		{name: "missing actual", previous: observationNumericTestValue("3.0%")},
+		{
+			name:     "unsupported grouped values",
+			previous: observationNumericTestValue("147,000"),
+			actual:   observationNumericTestValue("148,000"),
+		},
+		{
+			name:     "oversized value",
+			previous: observationNumericTestValue(strings.Repeat("9", maxObservationNumericValueLength+1)),
+			actual:   observationNumericTestValue("1"),
+		},
+		{
+			name:     "incompatible units",
+			previous: observationNumericTestValue("3.1%"),
+			actual:   observationNumericTestValue("3.3"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := observationNumericActualChange(test.previous, test.actual); got != nil {
+				t.Fatalf(
+					"observationNumericActualChange(%v, %v) = %v, want nil",
+					test.previous,
+					test.actual,
+					got,
+				)
+			}
+		})
+	}
+}
+
 func observationNumericTestValue(value string) *string {
 	return &value
 }

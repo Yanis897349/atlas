@@ -10,6 +10,7 @@ type EventContextObservation struct {
 	Latest            StoredObservation
 	Surprise          *string
 	SurpriseDirection *SurpriseDirection
+	ActualChange      *string
 	Revisions         []StoredObservation
 	Comparisons       []ObservationRevisionComparison
 }
@@ -53,6 +54,7 @@ func assembleEventContextObservations(
 			Latest:            observation,
 			Surprise:          surprise,
 			SurpriseDirection: surpriseDirection,
+			ActualChange:      observationNumericActualChange(observation.Previous, observation.Actual),
 			Revisions:         revisions,
 			Comparisons:       compareObservationRevisions(revisions),
 		})

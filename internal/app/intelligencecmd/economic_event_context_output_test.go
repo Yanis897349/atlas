@@ -55,6 +55,7 @@ func TestNewEconomicEventContextOutputMapsCompleteOrderedContext(t *testing.T) {
 	older.Actual = observationValue("3.10%")
 	surprise := "+0.2%"
 	direction := intelligence.SurpriseDirectionAboveConsensus
+	actualChange := "+0.3%"
 	delta := "+0.2%"
 	context := intelligence.EventContext{
 		Event:                  event,
@@ -65,6 +66,7 @@ func TestNewEconomicEventContextOutputMapsCompleteOrderedContext(t *testing.T) {
 				Latest:            latest,
 				Surprise:          &surprise,
 				SurpriseDirection: &direction,
+				ActualChange:      &actualChange,
 				Revisions:         []intelligence.StoredObservation{latest, older},
 				Comparisons: []intelligence.ObservationRevisionComparison{{
 					NewerRevisionID: latest.ID,
@@ -144,12 +146,15 @@ func TestNewEconomicEventContextOutputMapsCompleteOrderedContext(t *testing.T) {
 		got.Observations[0].Surprise == nil || *got.Observations[0].Surprise != surprise ||
 		got.Observations[0].SurpriseDirection == nil ||
 		*got.Observations[0].SurpriseDirection != direction ||
+		got.Observations[0].ActualChange == nil ||
+		*got.Observations[0].ActualChange != actualChange ||
 		got.Observations[0].CreatedAt != "2026-07-12T14:00:00Z" ||
 		got.Observations[0].UpdatedAt != "2026-07-12T15:00:00Z" ||
 		got.Observations[0].CreatedBy != "observation-ingestion" ||
 		got.Observations[0].UpdatedBy != "observation-refresh" ||
 		got.Observations[1].Consensus != nil || got.Observations[1].Actual != nil ||
 		got.Observations[1].Surprise != nil || got.Observations[1].SurpriseDirection != nil ||
+		got.Observations[1].ActualChange != nil ||
 		got.Observations[1].Previous == nil || *got.Observations[1].Previous != "3.2%" {
 		t.Errorf("output = %#v, want complete UTC event and observations in input order", got)
 	}
@@ -249,12 +254,27 @@ func assertEconomicEventContextOutputJSON(t *testing.T, output economicEventCont
 	if _, exists := fields["observations"]; !exists || len(fields) != 5 {
 		t.Errorf("output keys = %v, want complete event context schema", reflect.ValueOf(fields).MapKeys())
 	}
+	var observations []map[string]json.RawMessage
+	if err := json.Unmarshal(fields["observations"], &observations); err != nil {
+		t.Fatalf("decode observation output fields: %v", err)
+	}
+	if _, exists := observations[0]["actual_change"]; !exists {
+		t.Errorf("observation keys = %v, want actual_change", reflect.ValueOf(observations[0]).MapKeys())
+	}
+	var revisions []map[string]json.RawMessage
+	if err := json.Unmarshal(observations[0]["revisions"], &revisions); err != nil {
+		t.Fatalf("decode revision output fields: %v", err)
+	}
+	if _, exists := revisions[0]["actual_change"]; exists {
+		t.Errorf("revision keys = %v, want no actual_change", reflect.ValueOf(revisions[0]).MapKeys())
+	}
 	text := string(encoded)
 	for _, fragment := range []string{
 		`"consensus":null`,
 		`"actual":null`,
 		`"surprise":null`,
 		`"surprise_direction":null`,
+		`"actual_change":null`,
 		`"old_value":null`,
 		`"delta":"+0.2%"`,
 		`"delta":null`,

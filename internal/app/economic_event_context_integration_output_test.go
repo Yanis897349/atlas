@@ -174,18 +174,27 @@ func assertEconomicEventContextDerivedValues(
 		output.Observations[0].Surprise == nil || *output.Observations[0].Surprise != "+0.2%" ||
 		output.Observations[0].SurpriseDirection == nil ||
 		*output.Observations[0].SurpriseDirection != intelligence.SurpriseDirectionAboveConsensus ||
+		output.Observations[0].ActualChange == nil || *output.Observations[0].ActualChange != "+0.3%" ||
 		output.Observations[0].Previous == nil || *output.Observations[0].Previous != want.previous ||
 		output.Observations[1].Consensus != nil ||
 		output.Observations[1].Previous == nil || *output.Observations[1].Previous != want.previous ||
 		output.Observations[1].Actual == nil || *output.Observations[1].Actual != want.revisedActual ||
 		output.Observations[1].Surprise != nil || output.Observations[1].SurpriseDirection != nil ||
+		output.Observations[1].ActualChange == nil || *output.Observations[1].ActualChange != "+0.5%" ||
 		output.Observations[2].Surprise == nil || *output.Observations[2].Surprise != "0%" ||
 		output.Observations[2].SurpriseDirection == nil ||
 		*output.Observations[2].SurpriseDirection != intelligence.SurpriseDirectionInLine ||
 		output.Observations[3].Surprise == nil || *output.Observations[3].Surprise != "-0.1%" ||
 		output.Observations[3].SurpriseDirection == nil ||
 		*output.Observations[3].SurpriseDirection != intelligence.SurpriseDirectionBelowConsensus ||
+		output.Observations[2].ActualChange != nil || output.Observations[3].ActualChange != nil ||
 		output.Observations[4].Surprise != nil || output.Observations[4].SurpriseDirection != nil ||
+		output.Observations[4].ActualChange != nil ||
+		len(output.Observations[0].Revisions) == 0 ||
+		output.Observations[0].Revisions[0].ActualChange != nil ||
+		len(output.Observations[1].Revisions) == 0 ||
+		output.Observations[1].Revisions[0].ActualChange != nil ||
+		!bytes.Contains(want.rawOutput, []byte(`"actual_change":null`)) ||
 		!bytes.Contains(want.rawOutput, []byte(`"surprise_direction":null`)) {
 		t.Errorf("observation values = %#v, want exact nullable values", output.Observations)
 	}

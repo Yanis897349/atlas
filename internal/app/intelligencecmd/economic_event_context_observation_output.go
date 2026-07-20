@@ -6,6 +6,7 @@ type economicEventContextObservationOutput struct {
 	economicEventObservationOutput
 	Surprise          *string                                    `json:"surprise"`
 	SurpriseDirection *intelligence.SurpriseDirection            `json:"surprise_direction"`
+	ActualChange      *string                                    `json:"actual_change"`
 	Revisions         []economicEventObservationOutput           `json:"revisions"`
 	Comparisons       []economicEventObservationComparisonOutput `json:"comparisons"`
 }
@@ -30,6 +31,7 @@ func newEconomicEventContextObservationOutput(
 		economicEventObservationOutput: newEconomicEventObservationOutput(observation.Latest),
 		Surprise:                       observation.Surprise,
 		SurpriseDirection:              observation.SurpriseDirection,
+		ActualChange:                   observation.ActualChange,
 		Revisions: make(
 			[]economicEventObservationOutput,
 			0,

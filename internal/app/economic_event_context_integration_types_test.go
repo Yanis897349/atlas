@@ -20,6 +20,7 @@ type economicEventContextIntegrationObservation struct {
 	Actual              *string                                      `json:"actual"`
 	Surprise            *string                                      `json:"surprise"`
 	SurpriseDirection   *intelligence.SurpriseDirection              `json:"surprise_direction"`
+	ActualChange        *string                                      `json:"actual_change"`
 	CreatedAt           string                                       `json:"created_at"`
 	UpdatedAt           string                                       `json:"updated_at"`
 	CreatedBy           string                                       `json:"created_by"`
