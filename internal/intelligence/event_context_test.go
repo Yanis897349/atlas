@@ -73,8 +73,16 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 		PublicationWindowStart: windowStart.UTC(),
 		PublicationWindowEnd:   windowEnd.UTC(),
 		Observations: []EventContextObservation{
-			{Latest: observationResults[0], Revisions: observationRevisionResults[0]},
-			{Latest: observationResults[1], Revisions: observationRevisionResults[1]},
+			{
+				Latest:      observationResults[0],
+				Revisions:   observationRevisionResults[0],
+				Comparisons: compareObservationRevisions(observationRevisionResults[0]),
+			},
+			{
+				Latest:      observationResults[1],
+				Revisions:   observationRevisionResults[1],
+				Comparisons: []ObservationRevisionComparison{},
+			},
 		},
 		SourceRecords: results,
 	}

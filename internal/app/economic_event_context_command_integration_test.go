@@ -312,6 +312,33 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		output.Observations[1].Revisions[1].CreatedBy != "observation-citation-correction" {
 		t.Errorf("official revisions = %#v, want complete exact newest-first bounded history", output.Observations[1].Revisions)
 	}
+	if len(output.Observations[0].Comparisons) != 1 ||
+		output.Observations[0].Comparisons[0].NewerRevisionID != latestRevision.ID ||
+		output.Observations[0].Comparisons[0].OlderRevisionID != latestInitial.ID ||
+		len(output.Observations[0].Comparisons[0].Changes) != 1 ||
+		output.Observations[0].Comparisons[0].Changes[0].Field != "source_url" ||
+		output.Observations[0].Comparisons[0].Changes[0].OldValue == nil ||
+		*output.Observations[0].Comparisons[0].Changes[0].OldValue != latestInitial.SourceURL ||
+		output.Observations[0].Comparisons[0].Changes[0].NewValue == nil ||
+		*output.Observations[0].Comparisons[0].Changes[0].NewValue != latestRevision.SourceURL {
+		t.Errorf(
+			"latest identity comparisons = %#v, want exact adjacent citation comparison",
+			output.Observations[0].Comparisons,
+		)
+	}
+	if len(output.Observations[1].Comparisons) != 1 ||
+		output.Observations[1].Comparisons[0].NewerRevisionID != officialLatest.ID ||
+		output.Observations[1].Comparisons[0].OlderRevisionID != officialCitation.ID ||
+		len(output.Observations[1].Comparisons[0].Changes) != 1 ||
+		output.Observations[1].Comparisons[0].Changes[0].Field != "consensus" ||
+		output.Observations[1].Comparisons[0].Changes[0].OldValue == nil ||
+		*output.Observations[1].Comparisons[0].Changes[0].OldValue != consensus ||
+		output.Observations[1].Comparisons[0].Changes[0].NewValue != nil {
+		t.Errorf(
+			"official comparisons = %#v, want exact adjacent nullable value comparison",
+			output.Observations[1].Comparisons,
+		)
+	}
 	for _, revision := range output.Observations[1].Revisions {
 		if revision.ID == officialInitial.ID {
 			t.Errorf("official revisions included %q beyond per-identity limit", officialInitial.ID)
@@ -388,6 +415,19 @@ type economicEventContextIntegrationObservation struct {
 	CreatedBy           string                                       `json:"created_by"`
 	UpdatedBy           string                                       `json:"updated_by"`
 	Revisions           []economicEventContextIntegrationObservation `json:"revisions"`
+	Comparisons         []economicEventContextIntegrationComparison  `json:"comparisons"`
+}
+
+type economicEventContextIntegrationComparison struct {
+	NewerRevisionID string                                  `json:"newer_revision_id"`
+	OlderRevisionID string                                  `json:"older_revision_id"`
+	Changes         []economicEventContextIntegrationChange `json:"changes"`
+}
+
+type economicEventContextIntegrationChange struct {
+	Field    string  `json:"field"`
+	OldValue *string `json:"old_value"`
+	NewValue *string `json:"new_value"`
 }
 
 type economicEventContextIntegrationOutput struct {

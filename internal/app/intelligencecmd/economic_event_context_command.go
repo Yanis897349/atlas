@@ -22,7 +22,20 @@ type economicEventContextOutput struct {
 
 type economicEventContextObservationOutput struct {
 	economicEventObservationOutput
-	Revisions []economicEventObservationOutput `json:"revisions"`
+	Revisions   []economicEventObservationOutput           `json:"revisions"`
+	Comparisons []economicEventObservationComparisonOutput `json:"comparisons"`
+}
+
+type economicEventObservationComparisonOutput struct {
+	NewerRevisionID string                                 `json:"newer_revision_id"`
+	OlderRevisionID string                                 `json:"older_revision_id"`
+	Changes         []economicEventObservationChangeOutput `json:"changes"`
+}
+
+type economicEventObservationChangeOutput struct {
+	Field    intelligence.ObservationRevisionField `json:"field"`
+	OldValue *string                               `json:"old_value"`
+	NewValue *string                               `json:"new_value"`
 }
 
 type economicEventOutput struct {
@@ -96,12 +109,39 @@ func runEconomicEventContext(
 				0,
 				len(observation.Revisions),
 			),
+			Comparisons: make(
+				[]economicEventObservationComparisonOutput,
+				0,
+				len(observation.Comparisons),
+			),
 		}
 		for _, revision := range observation.Revisions {
 			encodedObservation.Revisions = append(
 				encodedObservation.Revisions,
 				newEconomicEventObservationOutput(revision),
 			)
+		}
+		for _, comparison := range observation.Comparisons {
+			encodedComparison := economicEventObservationComparisonOutput{
+				NewerRevisionID: comparison.NewerRevisionID,
+				OlderRevisionID: comparison.OlderRevisionID,
+				Changes: make(
+					[]economicEventObservationChangeOutput,
+					0,
+					len(comparison.Changes),
+				),
+			}
+			for _, change := range comparison.Changes {
+				encodedComparison.Changes = append(
+					encodedComparison.Changes,
+					economicEventObservationChangeOutput{
+						Field:    change.Field,
+						OldValue: change.OldValue,
+						NewValue: change.NewValue,
+					},
+				)
+			}
+			encodedObservation.Comparisons = append(encodedObservation.Comparisons, encodedComparison)
 		}
 		result.Observations = append(result.Observations, encodedObservation)
 	}

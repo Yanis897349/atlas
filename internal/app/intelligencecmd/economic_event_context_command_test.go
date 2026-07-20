@@ -151,7 +151,21 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 		got.Observations[0].Revisions[1].SourceURL != olderRevision.SourceURL ||
 		got.Observations[0].Revisions[1].Actual != nil ||
 		got.Observations[0].Revisions[1].ObservedAt != "2026-07-12T12:00:00Z" ||
+		len(got.Observations[0].Comparisons) != 1 ||
+		got.Observations[0].Comparisons[0].NewerRevisionID != observationResults[0].ID ||
+		got.Observations[0].Comparisons[0].OlderRevisionID != olderRevision.ID ||
+		len(got.Observations[0].Comparisons[0].Changes) != 2 ||
+		got.Observations[0].Comparisons[0].Changes[0].Field != intelligence.ObservationRevisionFieldActual ||
+		got.Observations[0].Comparisons[0].Changes[0].OldValue != nil ||
+		got.Observations[0].Comparisons[0].Changes[0].NewValue == nil ||
+		*got.Observations[0].Comparisons[0].Changes[0].NewValue != "3.3%" ||
+		got.Observations[0].Comparisons[0].Changes[1].Field != intelligence.ObservationRevisionFieldSourceURL ||
+		got.Observations[0].Comparisons[0].Changes[1].OldValue == nil ||
+		*got.Observations[0].Comparisons[0].Changes[1].OldValue != olderRevision.SourceURL ||
+		got.Observations[0].Comparisons[0].Changes[1].NewValue == nil ||
+		*got.Observations[0].Comparisons[0].Changes[1].NewValue != observationResults[0].SourceURL ||
 		got.Observations[1].Revisions == nil || len(got.Observations[1].Revisions) != 0 ||
+		got.Observations[1].Comparisons == nil || len(got.Observations[1].Comparisons) != 0 ||
 		len(got.SourceRecords) != 2 ||
 		got.SourceRecords[0].ID != results[0].SourceRecord.ID ||
 		got.SourceRecords[1].ID != results[1].SourceRecord.ID ||
@@ -162,7 +176,9 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 		t.Errorf("output = %#v, want complete UTC event context in repository order", got)
 	}
 	if !strings.Contains(stdout.String(), `"consensus":null`) ||
-		!strings.Contains(stdout.String(), `"actual":null`) {
+		!strings.Contains(stdout.String(), `"actual":null`) ||
+		!strings.Contains(stdout.String(), `"old_value":null`) ||
+		!strings.Contains(stdout.String(), `"comparisons":[]`) {
 		t.Errorf("output = %q, want nullable observation values encoded as null", stdout.String())
 	}
 }
