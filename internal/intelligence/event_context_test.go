@@ -27,6 +27,8 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 		storedObservationFixture("00000000-0000-0000-0000-000000000002", event.ID, "latest", windowEnd.UTC()),
 		storedObservationFixture("00000000-0000-0000-0000-000000000001", event.ID, "earlier", windowStart.UTC()),
 	}
+	compatibleConsensus := "3.2%"
+	observationResults[0].Consensus = &compatibleConsensus
 	observationResults[1].Consensus = nil
 	observationResults[1].Actual = nil
 	events := &economicEventReaderStub{event: event}
@@ -68,6 +70,7 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 	if err != nil {
 		t.Fatalf("AssembleEventContext() error = %v", err)
 	}
+	wantSurprise := "+0.1%"
 	want := EventContext{
 		Event:                  event,
 		PublicationWindowStart: windowStart.UTC(),
@@ -75,6 +78,7 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 		Observations: []EventContextObservation{
 			{
 				Latest:      observationResults[0],
+				Surprise:    &wantSurprise,
 				Revisions:   observationRevisionResults[0],
 				Comparisons: compareObservationRevisions(observationRevisionResults[0]),
 			},

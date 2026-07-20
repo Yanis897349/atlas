@@ -96,3 +96,12 @@ func observationNumericDelta(oldRaw, newRaw string) (*string, bool) {
 	formatted += string(oldValue.unit)
 	return &formatted, true
 }
+
+func observationNumericSurprise(consensus, actual *string) *string {
+	if consensus == nil || actual == nil {
+		return nil
+	}
+
+	surprise, _ := observationNumericDelta(*consensus, *actual)
+	return surprise
+}

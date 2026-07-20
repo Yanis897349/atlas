@@ -98,7 +98,9 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 			SourceObservationID: "cpi-latest-2026-07",
 			SourceURL:           "https://example.com/releases/cpi-latest-2026-07",
 			ObservedAt:          windowEnd.Add(3 * time.Hour),
+			Consensus:           &consensus,
 			Previous:            &previous,
+			Actual:              &actual,
 		},
 	}
 	storedObservations := make(map[string]intelligence.StoredObservation, len(observationFixtures))
@@ -297,8 +299,10 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		output.Observations[0].Revisions[0].CreatedBy != "latest-observation-correction" ||
 		output.Observations[0].Revisions[0].Previous == nil ||
 		*output.Observations[0].Revisions[0].Previous != previous ||
-		output.Observations[0].Revisions[0].Consensus != nil ||
-		output.Observations[0].Revisions[0].Actual != nil {
+		output.Observations[0].Revisions[0].Consensus == nil ||
+		*output.Observations[0].Revisions[0].Consensus != consensus ||
+		output.Observations[0].Revisions[0].Actual == nil ||
+		*output.Observations[0].Revisions[0].Actual != actual {
 		t.Errorf("latest identity revisions = %#v, want complete newest-first bounded history", output.Observations[0].Revisions)
 	}
 	if len(output.Observations[1].Revisions) != 2 ||
@@ -355,11 +359,14 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 			t.Errorf("official revisions included %q beyond per-identity limit", officialInitial.ID)
 		}
 	}
-	if output.Observations[0].Consensus != nil || output.Observations[0].Actual != nil ||
+	if output.Observations[0].Consensus == nil || *output.Observations[0].Consensus != consensus ||
+		output.Observations[0].Actual == nil || *output.Observations[0].Actual != actual ||
+		output.Observations[0].Surprise == nil || *output.Observations[0].Surprise != "+0.2%" ||
 		output.Observations[0].Previous == nil || *output.Observations[0].Previous != previous ||
 		output.Observations[1].Consensus != nil ||
 		output.Observations[1].Previous == nil || *output.Observations[1].Previous != previous ||
-		output.Observations[1].Actual == nil || *output.Observations[1].Actual != revisedActual {
+		output.Observations[1].Actual == nil || *output.Observations[1].Actual != revisedActual ||
+		output.Observations[1].Surprise != nil {
 		t.Errorf("observation values = %#v, want exact nullable values", output.Observations)
 	}
 	exact := []ingestion.StoredSourceRecord{records["start"], records["middle-a"]}
@@ -421,6 +428,7 @@ type economicEventContextIntegrationObservation struct {
 	Consensus           *string                                      `json:"consensus"`
 	Previous            *string                                      `json:"previous"`
 	Actual              *string                                      `json:"actual"`
+	Surprise            *string                                      `json:"surprise"`
 	CreatedAt           string                                       `json:"created_at"`
 	UpdatedAt           string                                       `json:"updated_at"`
 	CreatedBy           string                                       `json:"created_by"`

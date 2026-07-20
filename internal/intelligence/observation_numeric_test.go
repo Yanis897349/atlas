@@ -60,3 +60,82 @@ func TestObservationNumericDeltaRejectsUnsupportedOrIncompatibleValues(t *testin
 		})
 	}
 }
+
+func TestObservationNumericSurpriseCalculatesCompatibleValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		consensus *string
+		actual    *string
+		want      *string
+	}{
+		{
+			name:      "positive percent",
+			consensus: observationNumericTestValue("3.10%"),
+			actual:    observationNumericTestValue("3.3%"),
+			want:      observationNumericTestValue("+0.2%"),
+		},
+		{
+			name:      "negative percent",
+			consensus: observationNumericTestValue("3.3%"),
+			actual:    observationNumericTestValue("3.10%"),
+			want:      observationNumericTestValue("-0.2%"),
+		},
+		{
+			name:      "positive unitless",
+			consensus: observationNumericTestValue("100"),
+			actual:    observationNumericTestValue("125.50"),
+			want:      observationNumericTestValue("+25.5"),
+		},
+		{
+			name:      "zero",
+			consensus: observationNumericTestValue("+1.0"),
+			actual:    observationNumericTestValue("1.00"),
+			want:      observationNumericTestValue("0"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := observationNumericSurprise(test.consensus, test.actual)
+			if got == nil || *got != *test.want {
+				t.Fatalf("observationNumericSurprise(%v, %v) = %v, want %q", test.consensus, test.actual, got, *test.want)
+			}
+		})
+	}
+}
+
+func TestObservationNumericSurpriseIsUnavailableForMissingUnsupportedOrIncompatibleValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		consensus *string
+		actual    *string
+	}{
+		{name: "missing consensus", actual: observationNumericTestValue("3.2%")},
+		{name: "missing actual", consensus: observationNumericTestValue("3.0%")},
+		{
+			name:      "unsupported grouped values",
+			consensus: observationNumericTestValue("147,000"),
+			actual:    observationNumericTestValue("148,000"),
+		},
+		{
+			name:      "oversized value",
+			consensus: observationNumericTestValue(strings.Repeat("9", maxObservationNumericValueLength+1)),
+			actual:    observationNumericTestValue("1"),
+		},
+		{
+			name:      "incompatible units",
+			consensus: observationNumericTestValue("3.1%"),
+			actual:    observationNumericTestValue("3.3"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := observationNumericSurprise(test.consensus, test.actual); got != nil {
+				t.Fatalf("observationNumericSurprise(%v, %v) = %q, want nil", test.consensus, test.actual, *got)
+			}
+		})
+	}
+}
+
+func observationNumericTestValue(value string) *string {
+	return &value
+}
