@@ -178,8 +178,58 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"consensus":null`) ||
 		!strings.Contains(stdout.String(), `"actual":null`) ||
 		!strings.Contains(stdout.String(), `"old_value":null`) ||
+		!strings.Contains(stdout.String(), `"delta":null`) ||
 		!strings.Contains(stdout.String(), `"comparisons":[]`) {
 		t.Errorf("output = %q, want nullable observation values encoded as null", stdout.String())
+	}
+}
+
+func TestRunEconomicEventContextWritesNumericRevisionDeltas(t *testing.T) {
+	event := storedEventFixture("Inflation", time.Now())
+	older := intelligence.StoredObservation{
+		ID: "00000000-0000-0000-0000-000000000084",
+		Observation: intelligence.Observation{
+			EconomicEventID:     event.ID,
+			Source:              "official-statistics",
+			SourceObservationID: "cpi-2026-07",
+			SourceURL:           "https://example.com/releases/cpi-2026-07",
+			ObservedAt:          time.Now().Add(-time.Hour),
+			Actual:              observationValue("3.10%"),
+		},
+	}
+	newer := older
+	newer.ID = "00000000-0000-0000-0000-000000000085"
+	newer.ObservedAt = time.Now()
+	newer.Actual = observationValue("3.3%")
+	stdout := &bytes.Buffer{}
+
+	err := runEconomicEventContext(
+		t.Context(),
+		&economicEventReaderStub{event: event},
+		&observationReaderStub{results: []intelligence.StoredObservation{newer}},
+		&observationRevisionReaderStub{resultsByCall: [][]intelligence.StoredObservation{{newer, older}}},
+		&embedderStub{batch: validEmbeddingBatch()},
+		&similarSourceRecordReaderStub{results: []search.SimilarSourceRecord{}},
+		stdout,
+		validEventContextQuery(),
+	)
+	if err != nil {
+		t.Fatalf("runEconomicEventContext() error = %v", err)
+	}
+
+	var output economicEventContextOutput
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	changes := output.Observations[0].Comparisons[0].Changes
+	if len(changes) != 1 || changes[0].Field != intelligence.ObservationRevisionFieldActual ||
+		changes[0].OldValue == nil || *changes[0].OldValue != "3.10%" ||
+		changes[0].NewValue == nil || *changes[0].NewValue != "3.3%" ||
+		changes[0].Delta == nil || *changes[0].Delta != "+0.2%" {
+		t.Errorf("changes = %#v, want exact raw values and +0.2%% delta", changes)
+	}
+	if !strings.Contains(stdout.String(), `"delta":"+0.2%"`) {
+		t.Errorf("output = %q, want delta JSON field", stdout.String())
 	}
 }
 

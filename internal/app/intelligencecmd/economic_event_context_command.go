@@ -36,6 +36,7 @@ type economicEventObservationChangeOutput struct {
 	Field    intelligence.ObservationRevisionField `json:"field"`
 	OldValue *string                               `json:"old_value"`
 	NewValue *string                               `json:"new_value"`
+	Delta    *string                               `json:"delta"`
 }
 
 type economicEventOutput struct {
@@ -138,6 +139,7 @@ func runEconomicEventContext(
 						Field:    change.Field,
 						OldValue: change.OldValue,
 						NewValue: change.NewValue,
+						Delta:    change.Delta,
 					},
 				)
 			}

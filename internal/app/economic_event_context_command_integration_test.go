@@ -124,6 +124,8 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	officialLatestInput := officialCitationInput
 	officialLatestInput.ObservedAt = windowEnd.Add(2*time.Hour + 40*time.Minute)
 	officialLatestInput.Consensus = nil
+	revisedActual := "3.5%"
+	officialLatestInput.Actual = &revisedActual
 	officialLatest, err := observationRepository.StoreObservation(
 		t.Context(), officialLatestInput, "observation-value-correction",
 	)
@@ -304,7 +306,7 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		output.Observations[1].Revisions[1].ID != officialCitation.ID ||
 		output.Observations[1].Revisions[0].Consensus != nil ||
 		output.Observations[1].Revisions[0].Actual == nil ||
-		*output.Observations[1].Revisions[0].Actual != actual ||
+		*output.Observations[1].Revisions[0].Actual != revisedActual ||
 		output.Observations[1].Revisions[0].SourceURL != officialLatest.SourceURL ||
 		output.Observations[1].Revisions[0].CreatedAt == "" ||
 		output.Observations[1].Revisions[0].UpdatedAt == "" ||
@@ -320,7 +322,8 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		output.Observations[0].Comparisons[0].Changes[0].OldValue == nil ||
 		*output.Observations[0].Comparisons[0].Changes[0].OldValue != latestInitial.SourceURL ||
 		output.Observations[0].Comparisons[0].Changes[0].NewValue == nil ||
-		*output.Observations[0].Comparisons[0].Changes[0].NewValue != latestRevision.SourceURL {
+		*output.Observations[0].Comparisons[0].Changes[0].NewValue != latestRevision.SourceURL ||
+		output.Observations[0].Comparisons[0].Changes[0].Delta != nil {
 		t.Errorf(
 			"latest identity comparisons = %#v, want exact adjacent citation comparison",
 			output.Observations[0].Comparisons,
@@ -329,11 +332,19 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if len(output.Observations[1].Comparisons) != 1 ||
 		output.Observations[1].Comparisons[0].NewerRevisionID != officialLatest.ID ||
 		output.Observations[1].Comparisons[0].OlderRevisionID != officialCitation.ID ||
-		len(output.Observations[1].Comparisons[0].Changes) != 1 ||
+		len(output.Observations[1].Comparisons[0].Changes) != 2 ||
 		output.Observations[1].Comparisons[0].Changes[0].Field != "consensus" ||
 		output.Observations[1].Comparisons[0].Changes[0].OldValue == nil ||
 		*output.Observations[1].Comparisons[0].Changes[0].OldValue != consensus ||
-		output.Observations[1].Comparisons[0].Changes[0].NewValue != nil {
+		output.Observations[1].Comparisons[0].Changes[0].NewValue != nil ||
+		output.Observations[1].Comparisons[0].Changes[0].Delta != nil ||
+		output.Observations[1].Comparisons[0].Changes[1].Field != "actual" ||
+		output.Observations[1].Comparisons[0].Changes[1].OldValue == nil ||
+		*output.Observations[1].Comparisons[0].Changes[1].OldValue != actual ||
+		output.Observations[1].Comparisons[0].Changes[1].NewValue == nil ||
+		*output.Observations[1].Comparisons[0].Changes[1].NewValue != revisedActual ||
+		output.Observations[1].Comparisons[0].Changes[1].Delta == nil ||
+		*output.Observations[1].Comparisons[0].Changes[1].Delta != "+0.2%" {
 		t.Errorf(
 			"official comparisons = %#v, want exact adjacent nullable value comparison",
 			output.Observations[1].Comparisons,
@@ -348,7 +359,7 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 		output.Observations[0].Previous == nil || *output.Observations[0].Previous != previous ||
 		output.Observations[1].Consensus != nil ||
 		output.Observations[1].Previous == nil || *output.Observations[1].Previous != previous ||
-		output.Observations[1].Actual == nil || *output.Observations[1].Actual != actual {
+		output.Observations[1].Actual == nil || *output.Observations[1].Actual != revisedActual {
 		t.Errorf("observation values = %#v, want exact nullable values", output.Observations)
 	}
 	exact := []ingestion.StoredSourceRecord{records["start"], records["middle-a"]}
@@ -428,6 +439,7 @@ type economicEventContextIntegrationChange struct {
 	Field    string  `json:"field"`
 	OldValue *string `json:"old_value"`
 	NewValue *string `json:"new_value"`
+	Delta    *string `json:"delta"`
 }
 
 type economicEventContextIntegrationOutput struct {

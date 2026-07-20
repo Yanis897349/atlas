@@ -1,0 +1,62 @@
+package intelligence
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestObservationNumericDeltaFormatsExactCompatibleValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		oldRaw string
+		newRaw string
+		want   string
+	}{
+		{name: "positive percent", oldRaw: "3.00%", newRaw: "3.200%", want: "+0.2%"},
+		{name: "negative integer", oldRaw: "+100", newRaw: "+50", want: "-50"},
+		{name: "positive fraction", oldRaw: "1.25", newRaw: "1.500", want: "+0.25"},
+		{name: "explicit signs", oldRaw: "-1.5", newRaw: "+0.5", want: "+2"},
+		{name: "negative fraction", oldRaw: "0.125", newRaw: "-0.125", want: "-0.25"},
+		{name: "numeric zero", oldRaw: "+1.0", newRaw: "1.00", want: "0"},
+		{name: "percent zero", oldRaw: "0.00%", newRaw: "-0.0%", want: "0%"},
+		{name: "maximum integer length", oldRaw: strings.Repeat("9", maxObservationNumericValueLength), newRaw: strings.Repeat("9", maxObservationNumericValueLength), want: "0"},
+		{name: "maximum percent length", oldRaw: "0." + strings.Repeat("1", maxObservationNumericValueLength-3) + "%", newRaw: "0." + strings.Repeat("1", maxObservationNumericValueLength-3) + "%", want: "0%"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, valid := observationNumericDelta(test.oldRaw, test.newRaw)
+			if !valid || got == nil || *got != test.want {
+				t.Fatalf("observationNumericDelta(%q, %q) = (%v, %t), want %q", test.oldRaw, test.newRaw, got, valid, test.want)
+			}
+		})
+	}
+}
+
+func TestObservationNumericDeltaRejectsUnsupportedOrIncompatibleValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		oldRaw string
+		newRaw string
+	}{
+		{name: "incompatible units", oldRaw: "3.0%", newRaw: "3.2"},
+		{name: "grouped", oldRaw: "147,000", newRaw: "148,000"},
+		{name: "exponent", oldRaw: "1e2", newRaw: "2e2"},
+		{name: "leading whitespace", oldRaw: " 1", newRaw: "2"},
+		{name: "trailing whitespace", oldRaw: "1", newRaw: "2 "},
+		{name: "leading decimal point", oldRaw: ".1", newRaw: ".2"},
+		{name: "trailing decimal point", oldRaw: "1.", newRaw: "2."},
+		{name: "other unit", oldRaw: "1K", newRaw: "2K"},
+		{name: "blank", oldRaw: "", newRaw: "1"},
+		{name: "sign only", oldRaw: "+", newRaw: "1"},
+		{name: "oversized integer", oldRaw: strings.Repeat("9", maxObservationNumericValueLength+1), newRaw: "1"},
+		{name: "oversized scale", oldRaw: "0." + strings.Repeat("1", maxObservationNumericValueLength), newRaw: "0.1"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, valid := observationNumericDelta(test.oldRaw, test.newRaw)
+			if valid || got != nil {
+				t.Fatalf("observationNumericDelta(%q, %q) = (%v, %t), want unsupported", test.oldRaw, test.newRaw, got, valid)
+			}
+		})
+	}
+}

@@ -15,6 +15,7 @@ type ObservationRevisionChange struct {
 	Field    ObservationRevisionField
 	OldValue *string
 	NewValue *string
+	Delta    *string
 }
 
 // ObservationRevisionComparison describes changes from one older revision to its adjacent newer revision.
@@ -72,10 +73,20 @@ func appendObservationRevisionChange(
 	if equalObservationRevisionValues(oldValue, newValue) {
 		return changes
 	}
+	var delta *string
+	switch field {
+	case ObservationRevisionFieldConsensus,
+		ObservationRevisionFieldPrevious,
+		ObservationRevisionFieldActual:
+		if oldValue != nil && newValue != nil {
+			delta, _ = observationNumericDelta(*oldValue, *newValue)
+		}
+	}
 	return append(changes, ObservationRevisionChange{
 		Field:    field,
 		OldValue: oldValue,
 		NewValue: newValue,
+		Delta:    delta,
 	})
 }
 
