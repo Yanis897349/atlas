@@ -22,9 +22,10 @@ type economicEventContextOutput struct {
 
 type economicEventContextObservationOutput struct {
 	economicEventObservationOutput
-	Surprise    *string                                    `json:"surprise"`
-	Revisions   []economicEventObservationOutput           `json:"revisions"`
-	Comparisons []economicEventObservationComparisonOutput `json:"comparisons"`
+	Surprise          *string                                    `json:"surprise"`
+	SurpriseDirection *intelligence.SurpriseDirection            `json:"surprise_direction"`
+	Revisions         []economicEventObservationOutput           `json:"revisions"`
+	Comparisons       []economicEventObservationComparisonOutput `json:"comparisons"`
 }
 
 type economicEventObservationComparisonOutput struct {
@@ -107,6 +108,7 @@ func runEconomicEventContext(
 		encodedObservation := economicEventContextObservationOutput{
 			economicEventObservationOutput: newEconomicEventObservationOutput(observation.Latest),
 			Surprise:                       observation.Surprise,
+			SurpriseDirection:              observation.SurpriseDirection,
 			Revisions: make(
 				[]economicEventObservationOutput,
 				0,

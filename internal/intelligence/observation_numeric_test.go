@@ -63,41 +63,61 @@ func TestObservationNumericDeltaRejectsUnsupportedOrIncompatibleValues(t *testin
 
 func TestObservationNumericSurpriseCalculatesCompatibleValues(t *testing.T) {
 	tests := []struct {
-		name      string
-		consensus *string
-		actual    *string
-		want      *string
+		name          string
+		consensus     *string
+		actual        *string
+		want          *string
+		wantDirection SurpriseDirection
 	}{
 		{
-			name:      "positive percent",
-			consensus: observationNumericTestValue("3.10%"),
-			actual:    observationNumericTestValue("3.3%"),
-			want:      observationNumericTestValue("+0.2%"),
+			name:          "positive percent",
+			consensus:     observationNumericTestValue("3.10%"),
+			actual:        observationNumericTestValue("3.3%"),
+			want:          observationNumericTestValue("+0.2%"),
+			wantDirection: SurpriseDirectionAboveConsensus,
 		},
 		{
-			name:      "negative percent",
-			consensus: observationNumericTestValue("3.3%"),
-			actual:    observationNumericTestValue("3.10%"),
-			want:      observationNumericTestValue("-0.2%"),
+			name:          "negative percent",
+			consensus:     observationNumericTestValue("3.3%"),
+			actual:        observationNumericTestValue("3.10%"),
+			want:          observationNumericTestValue("-0.2%"),
+			wantDirection: SurpriseDirectionBelowConsensus,
 		},
 		{
-			name:      "positive unitless",
-			consensus: observationNumericTestValue("100"),
-			actual:    observationNumericTestValue("125.50"),
-			want:      observationNumericTestValue("+25.5"),
+			name:          "positive unitless",
+			consensus:     observationNumericTestValue("100"),
+			actual:        observationNumericTestValue("125.50"),
+			want:          observationNumericTestValue("+25.5"),
+			wantDirection: SurpriseDirectionAboveConsensus,
 		},
 		{
-			name:      "zero",
-			consensus: observationNumericTestValue("+1.0"),
-			actual:    observationNumericTestValue("1.00"),
-			want:      observationNumericTestValue("0"),
+			name:          "zero",
+			consensus:     observationNumericTestValue("+1.0"),
+			actual:        observationNumericTestValue("1.00"),
+			want:          observationNumericTestValue("0"),
+			wantDirection: SurpriseDirectionInLine,
+		},
+		{
+			name:          "percent signed zero",
+			consensus:     observationNumericTestValue("+0.00%"),
+			actual:        observationNumericTestValue("-0.0%"),
+			want:          observationNumericTestValue("0%"),
+			wantDirection: SurpriseDirectionInLine,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := observationNumericSurprise(test.consensus, test.actual)
-			if got == nil || *got != *test.want {
-				t.Fatalf("observationNumericSurprise(%v, %v) = %v, want %q", test.consensus, test.actual, got, *test.want)
+			got, gotDirection := observationNumericSurprise(test.consensus, test.actual)
+			if got == nil || *got != *test.want || gotDirection == nil || *gotDirection != test.wantDirection {
+				t.Fatalf(
+					"observationNumericSurprise(%v, %v) = (%v, %v), want (%q, %q)",
+					test.consensus,
+					test.actual,
+					got,
+					gotDirection,
+					*test.want,
+					test.wantDirection,
+				)
 			}
 		})
 	}
@@ -129,8 +149,15 @@ func TestObservationNumericSurpriseIsUnavailableForMissingUnsupportedOrIncompati
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := observationNumericSurprise(test.consensus, test.actual); got != nil {
-				t.Fatalf("observationNumericSurprise(%v, %v) = %q, want nil", test.consensus, test.actual, *got)
+			got, gotDirection := observationNumericSurprise(test.consensus, test.actual)
+			if got != nil || gotDirection != nil {
+				t.Fatalf(
+					"observationNumericSurprise(%v, %v) = (%v, %v), want (nil, nil)",
+					test.consensus,
+					test.actual,
+					got,
+					gotDirection,
+				)
 			}
 		})
 	}

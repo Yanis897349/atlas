@@ -140,12 +140,14 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 		got.Observations[0].Previous == nil || *got.Observations[0].Previous != "3.0%" ||
 		got.Observations[0].Actual == nil || *got.Observations[0].Actual != "3.3%" ||
 		got.Observations[0].Surprise == nil || *got.Observations[0].Surprise != "+0.2%" ||
+		got.Observations[0].SurpriseDirection == nil ||
+		*got.Observations[0].SurpriseDirection != intelligence.SurpriseDirectionAboveConsensus ||
 		got.Observations[0].CreatedAt != "2026-07-12T14:00:00Z" ||
 		got.Observations[0].UpdatedAt != "2026-07-12T15:00:00Z" ||
 		got.Observations[0].CreatedBy != "observation-ingestion" ||
 		got.Observations[0].UpdatedBy != "observation-refresh" ||
 		got.Observations[1].Consensus != nil || got.Observations[1].Actual != nil ||
-		got.Observations[1].Surprise != nil ||
+		got.Observations[1].Surprise != nil || got.Observations[1].SurpriseDirection != nil ||
 		got.Observations[1].Previous == nil || *got.Observations[1].Previous != "3.2%" ||
 		len(got.Observations[0].Revisions) != 2 ||
 		got.Observations[0].Revisions[0].ID != observationResults[0].ID ||
@@ -180,6 +182,7 @@ func TestRunEconomicEventContextWritesCompleteOrderedContext(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"consensus":null`) ||
 		!strings.Contains(stdout.String(), `"actual":null`) ||
 		!strings.Contains(stdout.String(), `"surprise":null`) ||
+		!strings.Contains(stdout.String(), `"surprise_direction":null`) ||
 		!strings.Contains(stdout.String(), `"old_value":null`) ||
 		!strings.Contains(stdout.String(), `"delta":null`) ||
 		!strings.Contains(stdout.String(), `"comparisons":[]`) {

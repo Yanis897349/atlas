@@ -10,9 +10,16 @@ const maxObservationNumericValueLength = 128
 
 type observationNumericUnit string
 
+// SurpriseDirection classifies an exact actual-minus-consensus difference.
+type SurpriseDirection string
+
 const (
 	observationNumericUnitNone    observationNumericUnit = ""
 	observationNumericUnitPercent observationNumericUnit = "%"
+
+	SurpriseDirectionAboveConsensus SurpriseDirection = "above_consensus"
+	SurpriseDirectionBelowConsensus SurpriseDirection = "below_consensus"
+	SurpriseDirectionInLine         SurpriseDirection = "in_line"
 )
 
 type observationNumericValue struct {
@@ -76,13 +83,18 @@ func parseObservationNumericValue(raw string) (observationNumericValue, bool) {
 }
 
 func observationNumericDelta(oldRaw, newRaw string) (*string, bool) {
+	delta, _, valid := observationNumericDifference(oldRaw, newRaw)
+	return delta, valid
+}
+
+func observationNumericDifference(oldRaw, newRaw string) (*string, int, bool) {
 	oldValue, valid := parseObservationNumericValue(oldRaw)
 	if !valid {
-		return nil, false
+		return nil, 0, false
 	}
 	newValue, valid := parseObservationNumericValue(newRaw)
 	if !valid || oldValue.unit != newValue.unit {
-		return nil, false
+		return nil, 0, false
 	}
 
 	difference := new(big.Rat).Sub(newValue.value, oldValue.value)
@@ -94,14 +106,24 @@ func observationNumericDelta(oldRaw, newRaw string) (*string, bool) {
 		formatted = "+" + formatted
 	}
 	formatted += string(oldValue.unit)
-	return &formatted, true
+	return &formatted, difference.Sign(), true
 }
 
-func observationNumericSurprise(consensus, actual *string) *string {
+func observationNumericSurprise(consensus, actual *string) (*string, *SurpriseDirection) {
 	if consensus == nil || actual == nil {
-		return nil
+		return nil, nil
 	}
 
-	surprise, _ := observationNumericDelta(*consensus, *actual)
-	return surprise
+	surprise, sign, valid := observationNumericDifference(*consensus, *actual)
+	if !valid {
+		return nil, nil
+	}
+
+	direction := SurpriseDirectionInLine
+	if sign > 0 {
+		direction = SurpriseDirectionAboveConsensus
+	} else if sign < 0 {
+		direction = SurpriseDirectionBelowConsensus
+	}
+	return surprise, &direction
 }

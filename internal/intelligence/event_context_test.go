@@ -71,16 +71,18 @@ func TestAssembleEventContextUsesExactEventNameAndPreservesOrderedCanonicalResul
 		t.Fatalf("AssembleEventContext() error = %v", err)
 	}
 	wantSurprise := "+0.1%"
+	wantSurpriseDirection := SurpriseDirectionAboveConsensus
 	want := EventContext{
 		Event:                  event,
 		PublicationWindowStart: windowStart.UTC(),
 		PublicationWindowEnd:   windowEnd.UTC(),
 		Observations: []EventContextObservation{
 			{
-				Latest:      observationResults[0],
-				Surprise:    &wantSurprise,
-				Revisions:   observationRevisionResults[0],
-				Comparisons: compareObservationRevisions(observationRevisionResults[0]),
+				Latest:            observationResults[0],
+				Surprise:          &wantSurprise,
+				SurpriseDirection: &wantSurpriseDirection,
+				Revisions:         observationRevisionResults[0],
+				Comparisons:       compareObservationRevisions(observationRevisionResults[0]),
 			},
 			{
 				Latest:      observationResults[1],

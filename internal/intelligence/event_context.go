@@ -24,10 +24,11 @@ type EventContextQuery struct {
 
 // EventContextObservation contains one latest observation and its bounded immutable revisions.
 type EventContextObservation struct {
-	Latest      StoredObservation
-	Surprise    *string
-	Revisions   []StoredObservation
-	Comparisons []ObservationRevisionComparison
+	Latest            StoredObservation
+	Surprise          *string
+	SurpriseDirection *SurpriseDirection
+	Revisions         []StoredObservation
+	Comparisons       []ObservationRevisionComparison
 }
 
 // EventContext contains one canonical event, its observations, and semantically related source records.
@@ -94,11 +95,13 @@ func AssembleEventContext(
 				observation.ID,
 			)
 		}
+		surprise, surpriseDirection := observationNumericSurprise(observation.Consensus, observation.Actual)
 		observationHistories = append(observationHistories, EventContextObservation{
-			Latest:      observation,
-			Surprise:    observationNumericSurprise(observation.Consensus, observation.Actual),
-			Revisions:   revisions,
-			Comparisons: compareObservationRevisions(revisions),
+			Latest:            observation,
+			Surprise:          surprise,
+			SurpriseDirection: surpriseDirection,
+			Revisions:         revisions,
+			Comparisons:       compareObservationRevisions(revisions),
 		})
 	}
 
