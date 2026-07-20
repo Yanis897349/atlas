@@ -1,7 +1,6 @@
 package intelligencecmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -32,16 +31,5 @@ func runObservationRevisions(
 		result = append(result, newEconomicEventObservationOutput(revision))
 	}
 
-	var encoded bytes.Buffer
-	if err := output.EncodeJSON(&encoded, "economic event observation revisions", result); err != nil {
-		return err
-	}
-	written, err := stdout.Write(encoded.Bytes())
-	if err != nil {
-		return fmt.Errorf("write economic event observation revisions: %w", err)
-	}
-	if written != encoded.Len() {
-		return fmt.Errorf("write economic event observation revisions: %w", io.ErrShortWrite)
-	}
-	return nil
+	return output.EncodeJSONBuffered(stdout, "economic event observation revisions", result)
 }

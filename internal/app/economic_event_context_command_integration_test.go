@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,12 +14,6 @@ import (
 	"github.com/Yanis897349/atlas/internal/calendar"
 	calendarpostgres "github.com/Yanis897349/atlas/internal/calendar/postgres"
 	"github.com/Yanis897349/atlas/internal/database/postgres/postgrestest"
-	"github.com/Yanis897349/atlas/internal/ingestion"
-	ingestionpostgres "github.com/Yanis897349/atlas/internal/ingestion/postgres"
-	"github.com/Yanis897349/atlas/internal/intelligence"
-	intelligencepostgres "github.com/Yanis897349/atlas/internal/intelligence/postgres"
-	"github.com/Yanis897349/atlas/internal/search"
-	searchpostgres "github.com/Yanis897349/atlas/internal/search/postgres"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -68,166 +61,8 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertEvent(empty) error = %v", err)
 	}
-	observationRepository, err := intelligencepostgres.NewRepository(database.Pool)
-	if err != nil {
-		t.Fatalf("NewRepository(observations) error = %v", err)
-	}
-	consensus, previous, actual := "3.1%", "3.0%", "3.3%"
-	belowActual, inLineActual := "3.0%", "3.10%"
-	observationFixtures := []intelligence.Observation{
-		{
-			EconomicEventID:     event.ID,
-			Source:              "excluded-statistics",
-			SourceObservationID: "cpi-excluded-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-excluded-2026-07",
-			ObservedAt:          windowEnd.Add(30 * time.Minute),
-			Consensus:           &consensus,
-		},
-		{
-			EconomicEventID:     event.ID,
-			Source:              "oldest-statistics",
-			SourceObservationID: "cpi-oldest-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-oldest-2026-07",
-			ObservedAt:          windowEnd.Add(time.Hour),
-			Consensus:           &consensus,
-		},
-		{
-			EconomicEventID:     event.ID,
-			Source:              "below-statistics",
-			SourceObservationID: "cpi-below-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-below-2026-07",
-			ObservedAt:          windowEnd.Add(75 * time.Minute),
-			Consensus:           &consensus,
-			Actual:              &belowActual,
-		},
-		{
-			EconomicEventID:     event.ID,
-			Source:              "inline-statistics",
-			SourceObservationID: "cpi-inline-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-inline-2026-07",
-			ObservedAt:          windowEnd.Add(90 * time.Minute),
-			Consensus:           &consensus,
-			Actual:              &inLineActual,
-		},
-		{
-			EconomicEventID:     event.ID,
-			Source:              "official-statistics",
-			SourceObservationID: "cpi-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-2026-07",
-			ObservedAt:          windowEnd.Add(2 * time.Hour),
-			Consensus:           &consensus,
-			Previous:            &previous,
-			Actual:              &actual,
-		},
-		{
-			EconomicEventID:     event.ID,
-			Source:              "latest-statistics",
-			SourceObservationID: "cpi-latest-2026-07",
-			SourceURL:           "https://example.com/releases/cpi-latest-2026-07",
-			ObservedAt:          windowEnd.Add(3 * time.Hour),
-			Consensus:           &consensus,
-			Previous:            &previous,
-			Actual:              &actual,
-		},
-	}
-	storedObservations := make(map[string]intelligence.StoredObservation, len(observationFixtures))
-	for _, fixture := range observationFixtures {
-		stored, persistErr := observationRepository.StoreObservation(
-			t.Context(), fixture, "observation-ingestion",
-		)
-		if persistErr != nil {
-			t.Fatalf("StoreObservation(%q) error = %v", fixture.SourceObservationID, persistErr)
-		}
-		storedObservations[fixture.SourceObservationID] = stored
-	}
-	officialInitial := storedObservations["cpi-2026-07"]
-	officialCitationInput := officialInitial.Observation
-	officialCitationInput.SourceURL = "https://example.com/releases/cpi-2026-07-corrected"
-	officialCitationInput.ObservedAt = windowEnd.Add(2*time.Hour + 20*time.Minute)
-	officialCitation, err := observationRepository.StoreObservation(
-		t.Context(), officialCitationInput, "observation-citation-correction",
-	)
-	if err != nil {
-		t.Fatalf("StoreObservation(official citation revision) error = %v", err)
-	}
-	officialLatestInput := officialCitationInput
-	officialLatestInput.ObservedAt = windowEnd.Add(2*time.Hour + 40*time.Minute)
-	officialLatestInput.Consensus = nil
-	revisedActual := "3.5%"
-	officialLatestInput.Actual = &revisedActual
-	officialLatest, err := observationRepository.StoreObservation(
-		t.Context(), officialLatestInput, "observation-value-correction",
-	)
-	if err != nil {
-		t.Fatalf("StoreObservation(official latest revision) error = %v", err)
-	}
-	storedObservations["cpi-2026-07"] = officialLatest
-
-	latestInitial := storedObservations["cpi-latest-2026-07"]
-	latestRevisionInput := latestInitial.Observation
-	latestRevisionInput.SourceURL = "https://example.com/releases/cpi-latest-2026-07-corrected"
-	latestRevisionInput.ObservedAt = windowEnd.Add(3*time.Hour + 20*time.Minute)
-	latestRevision, err := observationRepository.StoreObservation(
-		t.Context(), latestRevisionInput, "latest-observation-correction",
-	)
-	if err != nil {
-		t.Fatalf("StoreObservation(latest identity revision) error = %v", err)
-	}
-	storedObservations["cpi-latest-2026-07"] = latestRevision
-
-	sourceRepository, err := ingestionpostgres.NewRepository(database.Pool)
-	if err != nil {
-		t.Fatalf("NewRepository(source records) error = %v", err)
-	}
-	type sourceFixture struct {
-		itemID      string
-		publishedAt time.Time
-		vector      []float32
-		model       string
-	}
-	fixtures := []sourceFixture{
-		{itemID: "before", publishedAt: windowStart.Add(-time.Microsecond), vector: []float32{1, 0}, model: "embedding-model"},
-		{itemID: "start", publishedAt: windowStart, vector: []float32{1, 0}, model: "embedding-model"},
-		{itemID: "middle-a", publishedAt: windowStart.Add(time.Hour), vector: []float32{1, 0}, model: "embedding-model"},
-		{itemID: "middle-b", publishedAt: windowStart.Add(2 * time.Hour), vector: []float32{1, 1}, model: "embedding-model"},
-		{itemID: "end", publishedAt: windowEnd, vector: []float32{0, 1}, model: "embedding-model"},
-		{itemID: "after", publishedAt: windowEnd.Add(time.Microsecond), vector: []float32{1, 0}, model: "embedding-model"},
-		{itemID: "other-model", publishedAt: windowStart.Add(3 * time.Hour), vector: []float32{1, 0}, model: "other-model"},
-		{itemID: "other-dimension", publishedAt: windowStart.Add(3 * time.Hour), vector: []float32{1, 0, 0}, model: "embedding-model"},
-	}
-	records := make(map[string]ingestion.StoredSourceRecord, len(fixtures))
-	embeddings := make([]search.SourceRecordEmbedding, 0, len(fixtures))
-	for _, fixture := range fixtures {
-		record, persistErr := sourceRepository.UpsertSourceRecord(t.Context(), ingestion.SourceRecord{
-			Source:       "test-publisher",
-			SourceItemID: fixture.itemID,
-			OriginalURL:  "https://example.com/news/" + fixture.itemID,
-			Title:        "Story " + fixture.itemID,
-			PublishedAt:  fixture.publishedAt,
-			RetrievedAt:  fixture.publishedAt.Add(time.Minute),
-		}, "rss-ingestion")
-		if persistErr != nil {
-			t.Fatalf("UpsertSourceRecord(%q) error = %v", fixture.itemID, persistErr)
-		}
-		records[fixture.itemID] = record
-		embeddings = append(embeddings, search.SourceRecordEmbedding{
-			SourceRecordID: record.ID,
-			Provider:       "openai",
-			Model:          fixture.model,
-			Vector:         fixture.vector,
-		})
-	}
-	embeddingRepository, err := searchpostgres.NewRepository(database.Pool)
-	if err != nil {
-		t.Fatalf("NewRepository(embeddings) error = %v", err)
-	}
-	for index, batch := range [][]search.SourceRecordEmbedding{embeddings[:len(embeddings)-1], embeddings[len(embeddings)-1:]} {
-		if err := embeddingRepository.PersistSourceRecordEmbeddings(
-			t.Context(), batch, "search-indexer",
-		); err != nil {
-			t.Fatalf("PersistSourceRecordEmbeddings(batch %d) error = %v", index, err)
-		}
-	}
+	observationFixture := storeEconomicEventContextObservations(t, database.Pool, event.ID, windowEnd)
+	records := storeEconomicEventContextSourceRecords(t, database.Pool, windowStart, windowEnd)
 
 	var providerCalls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -283,162 +118,23 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("decode command output: %v", err)
 	}
-	var outputFields map[string]json.RawMessage
-	if err := json.Unmarshal(stdout.Bytes(), &outputFields); err != nil {
-		t.Fatalf("decode command output fields: %v", err)
-	}
-	if _, exists := outputFields["observations"]; !exists || len(outputFields) != 5 {
-		t.Errorf("command output fields = %v, want schema with observations", outputFields)
-	}
-	if output.Event.ID != event.ID || output.Event.Source != event.Source ||
-		output.Event.ExternalEventID != event.ExternalEventID || output.Event.Name != event.Name ||
-		output.Event.Region != event.Region || output.Event.EventType != event.Type ||
-		output.Event.SourceURL != event.SourceURL || output.Event.ScheduledAt == "" ||
-		output.Event.RetrievedAt == "" || output.Event.CreatedAt == "" || output.Event.UpdatedAt == "" ||
-		output.Event.CreatedBy != "calendar-ingestion" || output.Event.UpdatedBy != "calendar-ingestion" {
-		t.Errorf("event output = %#v, want complete canonical event", output.Event)
-	}
-	if output.PublicationWindowStart != windowStart.Format(time.RFC3339Nano) ||
-		output.PublicationWindowEnd != windowEnd.Format(time.RFC3339Nano) {
-		t.Errorf("publication window = (%q, %q), want normalized inclusive bounds", output.PublicationWindowStart, output.PublicationWindowEnd)
-	}
-	wantObservationIDs := []string{
-		storedObservations["cpi-latest-2026-07"].ID,
-		storedObservations["cpi-2026-07"].ID,
-		storedObservations["cpi-inline-2026-07"].ID,
-		storedObservations["cpi-below-2026-07"].ID,
-		storedObservations["cpi-oldest-2026-07"].ID,
-	}
-	if len(output.Observations) != len(wantObservationIDs) {
-		t.Fatalf("observations = %#v, want five bounded observations", output.Observations)
-	}
-	for index, wantID := range wantObservationIDs {
-		got := output.Observations[index]
-		want := storedObservations[got.SourceObservationID]
-		if got.ID != wantID || got.EconomicEventID != event.ID || got.Source == "" ||
-			got.SourceObservationID == "" || got.SourceURL == "" || got.ObservedAt == "" ||
-			got.CreatedAt == "" || got.UpdatedAt == "" || got.CreatedBy != want.CreatedBy ||
-			got.UpdatedBy != want.UpdatedBy {
-			t.Errorf("observations[%d] = %#v, want complete canonical observation %q", index, got, wantID)
-		}
-	}
-	for _, observation := range output.Observations {
-		if observation.ID == storedObservations["cpi-excluded-2026-07"].ID {
-			t.Errorf("observations included %q beyond latest-observation limit", observation.ID)
-		}
-	}
-	if len(output.Observations[0].Revisions) != 2 ||
-		output.Observations[0].Revisions[0].ID != latestRevision.ID ||
-		output.Observations[0].Revisions[1].ID != latestInitial.ID ||
-		output.Observations[0].Revisions[0].SourceURL != latestRevision.SourceURL ||
-		output.Observations[0].Revisions[0].CreatedBy != "latest-observation-correction" ||
-		output.Observations[0].Revisions[0].Previous == nil ||
-		*output.Observations[0].Revisions[0].Previous != previous ||
-		output.Observations[0].Revisions[0].Consensus == nil ||
-		*output.Observations[0].Revisions[0].Consensus != consensus ||
-		output.Observations[0].Revisions[0].Actual == nil ||
-		*output.Observations[0].Revisions[0].Actual != actual {
-		t.Errorf("latest identity revisions = %#v, want complete newest-first bounded history", output.Observations[0].Revisions)
-	}
-	if len(output.Observations[1].Revisions) != 2 ||
-		output.Observations[1].Revisions[0].ID != officialLatest.ID ||
-		output.Observations[1].Revisions[1].ID != officialCitation.ID ||
-		output.Observations[1].Revisions[0].Consensus != nil ||
-		output.Observations[1].Revisions[0].Actual == nil ||
-		*output.Observations[1].Revisions[0].Actual != revisedActual ||
-		output.Observations[1].Revisions[0].SourceURL != officialLatest.SourceURL ||
-		output.Observations[1].Revisions[0].CreatedAt == "" ||
-		output.Observations[1].Revisions[0].UpdatedAt == "" ||
-		output.Observations[1].Revisions[0].CreatedBy != "observation-value-correction" ||
-		output.Observations[1].Revisions[1].CreatedBy != "observation-citation-correction" {
-		t.Errorf("official revisions = %#v, want complete exact newest-first bounded history", output.Observations[1].Revisions)
-	}
-	if len(output.Observations[0].Comparisons) != 1 ||
-		output.Observations[0].Comparisons[0].NewerRevisionID != latestRevision.ID ||
-		output.Observations[0].Comparisons[0].OlderRevisionID != latestInitial.ID ||
-		len(output.Observations[0].Comparisons[0].Changes) != 1 ||
-		output.Observations[0].Comparisons[0].Changes[0].Field != "source_url" ||
-		output.Observations[0].Comparisons[0].Changes[0].OldValue == nil ||
-		*output.Observations[0].Comparisons[0].Changes[0].OldValue != latestInitial.SourceURL ||
-		output.Observations[0].Comparisons[0].Changes[0].NewValue == nil ||
-		*output.Observations[0].Comparisons[0].Changes[0].NewValue != latestRevision.SourceURL ||
-		output.Observations[0].Comparisons[0].Changes[0].Delta != nil {
-		t.Errorf(
-			"latest identity comparisons = %#v, want exact adjacent citation comparison",
-			output.Observations[0].Comparisons,
-		)
-	}
-	if len(output.Observations[1].Comparisons) != 1 ||
-		output.Observations[1].Comparisons[0].NewerRevisionID != officialLatest.ID ||
-		output.Observations[1].Comparisons[0].OlderRevisionID != officialCitation.ID ||
-		len(output.Observations[1].Comparisons[0].Changes) != 2 ||
-		output.Observations[1].Comparisons[0].Changes[0].Field != "consensus" ||
-		output.Observations[1].Comparisons[0].Changes[0].OldValue == nil ||
-		*output.Observations[1].Comparisons[0].Changes[0].OldValue != consensus ||
-		output.Observations[1].Comparisons[0].Changes[0].NewValue != nil ||
-		output.Observations[1].Comparisons[0].Changes[0].Delta != nil ||
-		output.Observations[1].Comparisons[0].Changes[1].Field != "actual" ||
-		output.Observations[1].Comparisons[0].Changes[1].OldValue == nil ||
-		*output.Observations[1].Comparisons[0].Changes[1].OldValue != actual ||
-		output.Observations[1].Comparisons[0].Changes[1].NewValue == nil ||
-		*output.Observations[1].Comparisons[0].Changes[1].NewValue != revisedActual ||
-		output.Observations[1].Comparisons[0].Changes[1].Delta == nil ||
-		*output.Observations[1].Comparisons[0].Changes[1].Delta != "+0.2%" {
-		t.Errorf(
-			"official comparisons = %#v, want exact adjacent nullable value comparison",
-			output.Observations[1].Comparisons,
-		)
-	}
-	for _, revision := range output.Observations[1].Revisions {
-		if revision.ID == officialInitial.ID {
-			t.Errorf("official revisions included %q beyond per-identity limit", officialInitial.ID)
-		}
-	}
-	if output.Observations[0].Consensus == nil || *output.Observations[0].Consensus != consensus ||
-		output.Observations[0].Actual == nil || *output.Observations[0].Actual != actual ||
-		output.Observations[0].Surprise == nil || *output.Observations[0].Surprise != "+0.2%" ||
-		output.Observations[0].SurpriseDirection == nil ||
-		*output.Observations[0].SurpriseDirection != intelligence.SurpriseDirectionAboveConsensus ||
-		output.Observations[0].Previous == nil || *output.Observations[0].Previous != previous ||
-		output.Observations[1].Consensus != nil ||
-		output.Observations[1].Previous == nil || *output.Observations[1].Previous != previous ||
-		output.Observations[1].Actual == nil || *output.Observations[1].Actual != revisedActual ||
-		output.Observations[1].Surprise != nil || output.Observations[1].SurpriseDirection != nil ||
-		output.Observations[2].Surprise == nil || *output.Observations[2].Surprise != "0%" ||
-		output.Observations[2].SurpriseDirection == nil ||
-		*output.Observations[2].SurpriseDirection != intelligence.SurpriseDirectionInLine ||
-		output.Observations[3].Surprise == nil || *output.Observations[3].Surprise != "-0.1%" ||
-		output.Observations[3].SurpriseDirection == nil ||
-		*output.Observations[3].SurpriseDirection != intelligence.SurpriseDirectionBelowConsensus ||
-		output.Observations[4].Surprise != nil || output.Observations[4].SurpriseDirection != nil ||
-		!bytes.Contains(stdout.Bytes(), []byte(`"surprise_direction":null`)) {
-		t.Errorf("observation values = %#v, want exact nullable values", output.Observations)
-	}
-	exact := []ingestion.StoredSourceRecord{records["start"], records["middle-a"]}
-	sort.Slice(exact, func(left, right int) bool { return exact[left].ID < exact[right].ID })
-	wantIDs := []string{exact[0].ID, exact[1].ID, records["middle-b"].ID, records["end"].ID}
-	if len(output.SourceRecords) != len(wantIDs) {
-		t.Fatalf("source records = %#v, want four inclusive matching records", output.SourceRecords)
-	}
-	for index, wantID := range wantIDs {
-		got := output.SourceRecords[index]
-		if got.ID != wantID || got.Source != "test-publisher" || got.SourceItemID == "" ||
-			got.OriginalURL == "" || got.Title == "" || got.PublishedAt == "" || got.RetrievedAt == "" ||
-			got.CreatedAt == "" || got.UpdatedAt == "" || got.CreatedBy != "rss-ingestion" ||
-			got.UpdatedBy != "rss-ingestion" || got.Provider != "openai" || got.Model != "embedding-model" {
-			t.Errorf("source_records[%d] = %#v, want complete canonical match %q", index, got, wantID)
-		}
-	}
-	if output.SourceRecords[0].CosineDistance != 0 || output.SourceRecords[1].CosineDistance != 0 ||
-		output.SourceRecords[2].CosineDistance <= 0 || output.SourceRecords[2].CosineDistance >= 1 ||
-		output.SourceRecords[3].CosineDistance != 1 {
-		t.Errorf("distances = [%v %v %v %v], want ordered [0 0 between-0-and-1 1]",
-			output.SourceRecords[0].CosineDistance,
-			output.SourceRecords[1].CosineDistance,
-			output.SourceRecords[2].CosineDistance,
-			output.SourceRecords[3].CosineDistance,
-		)
-	}
+	assertEconomicEventContextIntegrationOutput(t, output, economicEventContextIntegrationWant{
+		rawOutput:        stdout.Bytes(),
+		event:            event,
+		windowStart:      windowStart,
+		windowEnd:        windowEnd,
+		observations:     observationFixture.stored,
+		latestInitial:    observationFixture.latestInitial,
+		latestRevision:   observationFixture.latestRevision,
+		officialInitial:  observationFixture.officialInitial,
+		officialCitation: observationFixture.officialCitation,
+		officialLatest:   observationFixture.officialLatest,
+		consensus:        observationFixture.consensus,
+		previous:         observationFixture.previous,
+		actual:           observationFixture.actual,
+		revisedActual:    observationFixture.revisedActual,
+		sourceRecords:    records,
+	})
 
 	stdout.Reset()
 	env["ATLAS_OPENAI_EMBEDDING_MODEL"] = "unindexed-model"
@@ -461,74 +157,4 @@ func TestRunAssemblesEconomicEventContextEndToEnd(t *testing.T) {
 	if !errors.Is(err, pgx.ErrNoRows) || stdout.Len() != 0 || providerCalls.Load() != 2 {
 		t.Fatalf("missing event = (%v, %q, %d calls), want pgx.ErrNoRows without output or provider call", err, stdout.String(), providerCalls.Load())
 	}
-}
-
-type economicEventContextIntegrationObservation struct {
-	ID                  string                                       `json:"id"`
-	EconomicEventID     string                                       `json:"economic_event_id"`
-	Source              string                                       `json:"source"`
-	SourceObservationID string                                       `json:"source_observation_id"`
-	SourceURL           string                                       `json:"source_url"`
-	ObservedAt          string                                       `json:"observed_at"`
-	Consensus           *string                                      `json:"consensus"`
-	Previous            *string                                      `json:"previous"`
-	Actual              *string                                      `json:"actual"`
-	Surprise            *string                                      `json:"surprise"`
-	SurpriseDirection   *intelligence.SurpriseDirection              `json:"surprise_direction"`
-	CreatedAt           string                                       `json:"created_at"`
-	UpdatedAt           string                                       `json:"updated_at"`
-	CreatedBy           string                                       `json:"created_by"`
-	UpdatedBy           string                                       `json:"updated_by"`
-	Revisions           []economicEventContextIntegrationObservation `json:"revisions"`
-	Comparisons         []economicEventContextIntegrationComparison  `json:"comparisons"`
-}
-
-type economicEventContextIntegrationComparison struct {
-	NewerRevisionID string                                  `json:"newer_revision_id"`
-	OlderRevisionID string                                  `json:"older_revision_id"`
-	Changes         []economicEventContextIntegrationChange `json:"changes"`
-}
-
-type economicEventContextIntegrationChange struct {
-	Field    string  `json:"field"`
-	OldValue *string `json:"old_value"`
-	NewValue *string `json:"new_value"`
-	Delta    *string `json:"delta"`
-}
-
-type economicEventContextIntegrationOutput struct {
-	Event struct {
-		ID              string             `json:"id"`
-		Source          string             `json:"source"`
-		ExternalEventID string             `json:"external_event_id"`
-		Name            string             `json:"name"`
-		Region          calendar.Region    `json:"region"`
-		EventType       calendar.EventType `json:"event_type"`
-		ScheduledAt     string             `json:"scheduled_at"`
-		SourceURL       string             `json:"source_url"`
-		RetrievedAt     string             `json:"retrieved_at"`
-		CreatedAt       string             `json:"created_at"`
-		UpdatedAt       string             `json:"updated_at"`
-		CreatedBy       string             `json:"created_by"`
-		UpdatedBy       string             `json:"updated_by"`
-	} `json:"event"`
-	PublicationWindowStart string                                       `json:"publication_window_start"`
-	PublicationWindowEnd   string                                       `json:"publication_window_end"`
-	Observations           []economicEventContextIntegrationObservation `json:"observations"`
-	SourceRecords          []struct {
-		ID             string  `json:"id"`
-		Source         string  `json:"source"`
-		SourceItemID   string  `json:"source_item_id"`
-		OriginalURL    string  `json:"original_url"`
-		Title          string  `json:"title"`
-		PublishedAt    string  `json:"published_at"`
-		RetrievedAt    string  `json:"retrieved_at"`
-		CreatedAt      string  `json:"created_at"`
-		UpdatedAt      string  `json:"updated_at"`
-		CreatedBy      string  `json:"created_by"`
-		UpdatedBy      string  `json:"updated_by"`
-		Provider       string  `json:"provider"`
-		Model          string  `json:"model"`
-		CosineDistance float64 `json:"cosine_distance"`
-	} `json:"source_records"`
 }

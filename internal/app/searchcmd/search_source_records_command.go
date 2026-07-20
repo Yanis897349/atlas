@@ -1,7 +1,6 @@
 package searchcmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -60,16 +59,5 @@ func runSearchSourceRecords(
 		})
 	}
 
-	var encoded bytes.Buffer
-	if err := output.EncodeJSON(&encoded, "searched source records", result); err != nil {
-		return err
-	}
-	written, err := stdout.Write(encoded.Bytes())
-	if err != nil {
-		return fmt.Errorf("write searched source records: %w", err)
-	}
-	if written != encoded.Len() {
-		return fmt.Errorf("write searched source records: %w", io.ErrShortWrite)
-	}
-	return nil
+	return output.EncodeJSONBuffered(stdout, "searched source records", result)
 }

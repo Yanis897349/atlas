@@ -22,15 +22,6 @@ type EventContextQuery struct {
 	ObservationRevisionLimit int
 }
 
-// EventContextObservation contains one latest observation and its bounded immutable revisions.
-type EventContextObservation struct {
-	Latest            StoredObservation
-	Surprise          *string
-	SurpriseDirection *SurpriseDirection
-	Revisions         []StoredObservation
-	Comparisons       []ObservationRevisionComparison
-}
-
 // EventContext contains one canonical event, its observations, and semantically related source records.
 type EventContext struct {
 	Event                  calendar.StoredEvent
@@ -69,40 +60,15 @@ func AssembleEventContext(
 	if err != nil {
 		return EventContext{}, fmt.Errorf("retrieve economic event observations: %w", err)
 	}
-	observationHistories := make([]EventContextObservation, 0, len(eventObservations))
-	for _, observation := range eventObservations {
-		revisions, err := observationRevisions.ObservationRevisions(
-			ctx,
-			event.ID,
-			observation.Source,
-			observation.SourceObservationID,
-			query.ObservationRevisionLimit,
-		)
-		if err != nil {
-			return EventContext{}, fmt.Errorf(
-				"retrieve economic event observation revisions for source %q identity %q: %w",
-				observation.Source,
-				observation.SourceObservationID,
-				err,
-			)
-		}
-		if len(revisions) > 0 && revisions[0].ID != observation.ID {
-			return EventContext{}, fmt.Errorf(
-				"validate economic event observation revisions for source %q identity %q: latest revision %q does not match selected observation %q",
-				observation.Source,
-				observation.SourceObservationID,
-				revisions[0].ID,
-				observation.ID,
-			)
-		}
-		surprise, surpriseDirection := observationNumericSurprise(observation.Consensus, observation.Actual)
-		observationHistories = append(observationHistories, EventContextObservation{
-			Latest:            observation,
-			Surprise:          surprise,
-			SurpriseDirection: surpriseDirection,
-			Revisions:         revisions,
-			Comparisons:       compareObservationRevisions(revisions),
-		})
+	observationHistories, err := assembleEventContextObservations(
+		ctx,
+		observationRevisions,
+		event.ID,
+		eventObservations,
+		query.ObservationRevisionLimit,
+	)
+	if err != nil {
+		return EventContext{}, err
 	}
 
 	filters := search.SimilarSourceRecordFilters{
